@@ -32,6 +32,21 @@ server/uploads/*
 !server/uploads/.gitkeep
 server/auth.db
 
+## SQLite journal files
+server/auth.db-journal
+server/auth.db-wal
+server/auth.db-shm
+
+## Caches / build artifacts (generic)
+.eslintcache
+*.tsbuildinfo
+.cache/
+
+## IDEs
+.idea/
+.history/
+desktop.ini
+
 ## Coverage
 coverage/
 
