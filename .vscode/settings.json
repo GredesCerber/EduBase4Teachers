@@ -1,0 +1,6 @@
+{
+  // Avoid false-positive errors for Tailwind directives like @tailwind and @apply
+  "css.lint.unknownAtRules": "ignore",
+  "scss.lint.unknownAtRules": "ignore",
+  "less.lint.unknownAtRules": "ignore"
+}
