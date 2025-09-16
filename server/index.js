@@ -228,7 +228,17 @@ app.get('/api/news/inform', async (_req, res) => {
 // Static for uploaded files
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
-const uploadsDir = path.join(__dirname, 'uploads')
+function expandPath(p) {
+  if (!p) return ''
+  let out = String(p)
+  out = out.replace(/%([^%]+)%/g, (_m, v) => process.env[String(v)] || _m)
+  out = out.replace(/\${([^}]+)}/g, (_m, v) => process.env[String(v)] || _m)
+  if (out.startsWith('~')) out = path.join(process.env.HOME || process.env.USERPROFILE || '', out.slice(1))
+  if (!path.isAbsolute(out)) out = path.resolve(__dirname, out)
+  return out
+}
+
+const uploadsDir = process.env.UPLOADS_DIR ? expandPath(process.env.UPLOADS_DIR) : path.join(__dirname, 'uploads')
 if (!fs.existsSync(uploadsDir)) fs.mkdirSync(uploadsDir, { recursive: true })
 app.use('/uploads', express.static(uploadsDir))
 

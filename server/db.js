@@ -1,11 +1,34 @@
 import sqlite3 from 'sqlite3'
 import path from 'node:path'
+import fs from 'node:fs'
+import os from 'node:os'
 import { fileURLToPath } from 'node:url'
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
 
-const dbPath = path.join(__dirname, 'auth.db')
+function expandPath(p) {
+  if (!p) return ''
+  let out = String(p)
+  // Expand Windows %VAR%
+  out = out.replace(/%([^%]+)%/g, (_m, v) => process.env[String(v)] || _m)
+  // Expand POSIX ${VAR}
+  out = out.replace(/\${([^}]+)}/g, (_m, v) => process.env[String(v)] || _m)
+  // Expand ~
+  if (out.startsWith('~')) {
+    out = path.join(os.homedir(), out.slice(1))
+  }
+  if (!path.isAbsolute(out)) {
+    out = path.resolve(__dirname, out)
+  }
+  return out
+}
+
+const envDbPath = process.env.DB_PATH ? expandPath(process.env.DB_PATH) : null
+const dbPath = envDbPath || path.join(__dirname, 'auth.db')
+try {
+  fs.mkdirSync(path.dirname(dbPath), { recursive: true })
+} catch {}
 sqlite3.verbose()
 export const db = new sqlite3.Database(dbPath)
 
