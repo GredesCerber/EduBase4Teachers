@@ -15,7 +15,14 @@ export default function News() {
       try {
         setLoading(true)
         const res = await getInformNews()
-        if (!ignore) setItems(res.items || [])
+        const filtered = (res.items || []).filter((it) => {
+          const t = (it.title || '').toLowerCase()
+          const u = (it.url || '').toLowerCase()
+          const im = (it.image || '').toLowerCase()
+          const adWords = ['реклама', 'на правах рекламы', 'promo', 'промо', 'sponsor', 'sponsored', 'adv', 'banner', 'adfox']
+          return !adWords.some((w) => t.includes(w) || u.includes(w) || im.includes(w))
+        })
+        if (!ignore) setItems(filtered)
   } catch {
         if (!ignore) setError('Не удалось загрузить новости')
       } finally {

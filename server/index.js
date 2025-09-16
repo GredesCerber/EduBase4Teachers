@@ -140,24 +140,67 @@ app.get('/api/news/inform', async (_req, res) => {
     if (informCache.data.length && now - informCache.ts < 5 * 60 * 1000) {
       return res.json({ items: informCache.data, cached: true })
     }
-  const response = await axios.get(INFORM_URL, { headers: { 'User-Agent': 'Mozilla/5.0 (compatible; EduBaseBot/1.0)' }, timeout: 10000 })
-  const $ = cheerioLoad(response.data)
+    const response = await axios.get(INFORM_URL, { headers: { 'User-Agent': 'Mozilla/5.0 (compatible; EduBaseBot/1.0)' }, timeout: 10000 })
+    const $ = cheerioLoad(response.data)
+
     const items = []
-    // The site structure may change; this selector targets list items in category page
+
+    function absolutize(u) {
+      if (!u) return ''
+      if (u.startsWith('//')) return `https:${u}`
+      if (u.startsWith('/')) return `https://www.inform.kz${u}`
+      return u
+    }
+
+    function pickFromSrcset(srcset) {
+      try {
+        // srcset: "url1 320w, url2 640w" → pick the largest (last)
+        const parts = String(srcset).split(',').map((s) => s.trim()).filter(Boolean)
+        if (!parts.length) return ''
+        const last = parts[parts.length - 1].split(' ')[0]
+        return last || ''
+      } catch { return '' }
+    }
+
+    function extractImage(root) {
+      const img = root.find('img').first()
+      const pic = root.find('picture source').first()
+      let src = img.attr('data-src') || img.attr('data-original') || img.attr('data-lazy-src') || img.attr('src') || ''
+      if (!src) {
+        const ss = pic.attr('srcset') || img.attr('srcset') || ''
+        if (ss) src = pickFromSrcset(ss)
+      }
+      src = (src || '').trim()
+      return absolutize(src)
+    }
+
+    function isLikelyAd({ root, title, href, image }) {
+      const t = (title || '').toLowerCase()
+      const h = (href || '').toLowerCase()
+      const im = (image || '').toLowerCase()
+      const cls = (root.attr('class') || '').toLowerCase()
+      const text = (root.text() || '').toLowerCase()
+      const adWords = ['реклама', 'на правах рекламы', 'promo', 'промо', 'реклам', 'sponsor', 'sponsored', 'adv', 'banner', 'adfox']
+      if (adWords.some((w) => t.includes(w) || text.includes(w))) return true
+      if (adWords.some((w) => cls.includes(w))) return true
+      if (adWords.some((w) => h.includes(w))) return true
+      if (adWords.some((w) => im.includes(w))) return true
+      return false
+    }
+
+    // The site structure may change; try the most common containers
     $('.list-news__item, .news__item, article').each((_, el) => {
       const root = $(el)
       const linkEl = root.find('a').first()
       let href = linkEl.attr('href') || ''
-      if (href && href.startsWith('/')) href = `https://www.inform.kz${href}`
+      href = absolutize(href)
       const title = (linkEl.attr('title') || linkEl.text() || '').trim()
-      const imgEl = root.find('img').first()
-      let image = (imgEl.attr('data-src') || imgEl.attr('src') || '').trim()
-      if (image && image.startsWith('/')) image = `https://www.inform.kz${image}`
+      const image = extractImage(root)
       const summary = (root.find('.list-news__desc, .news__desc, .article__desc, p').first().text() || '').trim()
       const dateText = (root.find('time').attr('datetime') || root.find('time').text() || '').trim()
-      if (title && href) {
-        items.push({ title, url: href, image: image || null, summary: summary || null, publishedAt: dateText || null })
-      }
+      if (!title || !href) return
+      if (isLikelyAd({ root, title, href, image })) return
+      items.push({ title, url: href, image: image || null, summary: summary || null, publishedAt: dateText || null })
     })
     // Fallback: try another structure if none parsed
     if (!items.length) {
@@ -165,8 +208,12 @@ app.get('/api/news/inform', async (_req, res) => {
         const t = ($(el).attr('title') || $(el).text() || '').trim()
         let href = $(el).attr('href') || ''
         if (t && href && href.includes('/ru/')) {
-          if (href.startsWith('/')) href = `https://www.inform.kz${href}`
-          items.push({ title: t, url: href, image: null, summary: null, publishedAt: null })
+          href = absolutize(href)
+          const root = $(el).closest('article, .list-news__item, .news__item')
+          const image = extractImage(root)
+          if (!isLikelyAd({ root, title: t, href, image })) {
+            items.push({ title: t, url: href, image: image || null, summary: null, publishedAt: null })
+          }
         }
       })
     }
