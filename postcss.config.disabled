@@ -1,3 +1,0 @@
-// PostCSS config intentionally disabled for Tailwind v4 + Vite Lightning CSS.
-// If you need PostCSS later, rename this file back to postcss.config.js and add plugins.
-module.exports = { plugins: {} }
