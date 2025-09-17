@@ -333,13 +333,13 @@ export default function MyMaterials() {
                     <ul className="list-disc ml-5 space-y-1">
                       {m.fileUrl && (
                         <li>
-                          <a href={`http://localhost:4000/api/materials/${m.id}/download`} className="underline">{m.fileName || 'скачать'}</a>
+                          <a href={`/api/materials/${m.id}/download`} className="underline">{m.fileName || 'скачать'}</a>
                           {m.size ? <span className="text-slate-500"> ({Math.round(m.size / 1024)} КБ)</span> : null}
                         </li>
                       )}
                       {(m.attachments || []).filter((f: any) => f.is_main === 1).map((f: any) => (
                         <li key={f.id}>
-                          <a href={`http://localhost:4000/api/files/${f.id}/download`} className="underline break-all">{f.file_name}</a>
+                          <a href={`/api/files/${f.id}/download`} className="underline break-all">{f.file_name}</a>
                           {f.size ? <span className="text-slate-500"> ({Math.round((f.size || 0) / 1024)} КБ)</span> : null}
                         </li>
                       ))}
@@ -352,7 +352,7 @@ export default function MyMaterials() {
                     <ul className="list-disc ml-5 space-y-1">
                       {m.attachments.filter((f: any) => f.is_main !== 1).map((f) => (
                         <li key={f.id} className="flex items-center gap-2">
-                          <a href={`http://localhost:4000/api/files/${f.id}/download`} className="underline break-all">{f.file_name}</a>
+                          <a href={`/api/files/${f.id}/download`} className="underline break-all">{f.file_name}</a>
                           {f.size ? <span className="text-slate-500"> ({Math.round((f.size || 0) / 1024)} КБ)</span> : null}
                           <button
                             type="button"
@@ -547,7 +547,7 @@ function EditMaterialDialog({ material, onClose, onSaved }: { material: UserMate
                   )}
                   {attachments.filter((f: any) => f.is_main === 1).map((f: any) => (
                     <li key={f.id} className="flex items-center gap-2">
-                      <a href={`http://localhost:4000/api/files/${f.id}/download`} className="underline break-all">{f.file_name}</a>
+                      <a href={`/api/files/${f.id}/download`} className="underline break-all">{f.file_name}</a>
                       <button type="button" className="text-red-600 hover:underline" onClick={async () => {
                         try {
                           await deleteAttachment(f.id)
@@ -567,7 +567,7 @@ function EditMaterialDialog({ material, onClose, onSaved }: { material: UserMate
                   <ul className="list-disc ml-5 space-y-1">
                     {attachments.filter((f: any) => f.is_main !== 1).map((f: any) => (
                       <li key={f.id} className="flex items-center gap-2">
-                        <a href={`http://localhost:4000/api/files/${f.id}/download`} className="underline break-all">{f.file_name}</a>
+                        <a href={`/api/files/${f.id}/download`} className="underline break-all">{f.file_name}</a>
                         <button type="button" className="text-blue-600 hover:underline" onClick={async () => {
                           try {
                             const res = await markAttachmentAsMain(f.id)

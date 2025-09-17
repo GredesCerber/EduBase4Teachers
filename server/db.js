@@ -59,6 +59,11 @@ export function initDb() {
       created_at TEXT NOT NULL,
       FOREIGN KEY(user_id) REFERENCES users(id)
     )`)
+  // Indexes for faster lookups
+  db.run('CREATE INDEX IF NOT EXISTS idx_users_email ON users(lower(email))')
+  db.run('CREATE INDEX IF NOT EXISTS idx_materials_user_id ON materials(user_id)')
+  db.run('CREATE INDEX IF NOT EXISTS idx_materials_created_at ON materials(created_at)')
+  db.run('CREATE INDEX IF NOT EXISTS idx_material_files_material_id ON material_files(material_id)')
 
     // Ensure description column exists for older DBs
     db.all(`PRAGMA table_info(materials)`, [], (err, rows) => {
@@ -66,6 +71,14 @@ export function initDb() {
       const hasDesc = Array.isArray(rows) && rows.some((r) => r.name === 'description')
       if (!hasDesc) {
         db.run('ALTER TABLE materials ADD COLUMN description TEXT')
+      }
+      const hasViews = Array.isArray(rows) && rows.some((r) => r.name === 'views')
+      if (!hasViews) {
+        db.run('ALTER TABLE materials ADD COLUMN views INTEGER DEFAULT 0')
+      }
+      const hasDownloads = Array.isArray(rows) && rows.some((r) => r.name === 'downloads')
+      if (!hasDownloads) {
+        db.run('ALTER TABLE materials ADD COLUMN downloads INTEGER DEFAULT 0')
       }
     })
 
@@ -88,6 +101,39 @@ export function initDb() {
       const hasIsMain = Array.isArray(rows) && rows.some((r) => r.name === 'is_main')
       if (!hasIsMain) {
         db.run('ALTER TABLE material_files ADD COLUMN is_main INTEGER DEFAULT 0')
+      }
+    })
+
+    // Favorites table (server-side saved)
+    db.run(`CREATE TABLE IF NOT EXISTS favorites (
+      user_id INTEGER NOT NULL,
+      material_id INTEGER NOT NULL,
+      created_at TEXT NOT NULL,
+      PRIMARY KEY (user_id, material_id),
+      FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE,
+      FOREIGN KEY(material_id) REFERENCES materials(id) ON DELETE CASCADE
+    )`)
+
+    // FTS5 virtual table for full-text search on title/description
+    db.run(`CREATE VIRTUAL TABLE IF NOT EXISTS materials_fts USING fts5(
+      title, description, content='materials', content_rowid='id'
+    )`)
+    // Triggers to keep FTS index in sync
+    db.run(`CREATE TRIGGER IF NOT EXISTS materials_ai AFTER INSERT ON materials BEGIN
+      INSERT INTO materials_fts(rowid, title, description) VALUES (new.id, new.title, coalesce(new.description, ''));
+    END`)
+    db.run(`CREATE TRIGGER IF NOT EXISTS materials_ad AFTER DELETE ON materials BEGIN
+      INSERT INTO materials_fts(materials_fts, rowid, title, description) VALUES('delete', old.id, old.title, coalesce(old.description, ''));
+    END`)
+    db.run(`CREATE TRIGGER IF NOT EXISTS materials_au AFTER UPDATE ON materials BEGIN
+      INSERT INTO materials_fts(materials_fts, rowid, title, description) VALUES('delete', old.id, old.title, coalesce(old.description, ''));
+      INSERT INTO materials_fts(rowid, title, description) VALUES (new.id, new.title, coalesce(new.description, ''));
+    END`)
+    // Initial populate if empty
+    db.get('SELECT COUNT(1) AS cnt FROM materials_fts', [], (e2, r2) => {
+      if (!e2 && r2 && Number(r2.cnt) === 0) {
+        db.run(`INSERT INTO materials_fts(rowid, title, description)
+                SELECT id, title, coalesce(description,'') FROM materials WHERE title IS NOT NULL`)
       }
     })
   })
@@ -179,6 +225,68 @@ export function listMaterials() {
       [],
       (err, rows) => (err ? reject(err) : resolve(rows))
     )
+  })
+}
+
+export function listMaterialsFiltered({ q = '', subject = '', grade = '', type = '', limit = 20, offset = 0, sort = 'new', favoriteOfUserId = null } = {}) {
+  const where = []
+  const params = []
+  let useFts = false
+  if (subject) { where.push('m.subject = ?'); params.push(subject) }
+  if (grade) { where.push('m.grade = ?'); params.push(grade) }
+  if (type) { where.push('m.type = ?'); params.push(type) }
+  if (q) { useFts = true }
+  let joinFts = ''
+  if (useFts) {
+    joinFts = 'JOIN materials_fts f ON f.rowid = m.id AND f MATCH ?'
+    params.unshift(`${q.replace(/"/g, '""')}*`)
+  }
+  if (favoriteOfUserId != null) {
+    where.push('EXISTS (SELECT 1 FROM favorites fav WHERE fav.material_id = m.id AND fav.user_id = ?)')
+    params.push(favoriteOfUserId)
+  }
+  const whereSql = where.length ? `WHERE ${where.join(' AND ')}` : ''
+  let orderBy = 'datetime(m.created_at) DESC'
+  if (sort === 'popular') orderBy = 'm.downloads DESC, m.views DESC, datetime(m.created_at) DESC'
+  // If FTS is used and sort is relevance (default when q provided), rank by bm25
+  const selectRank = useFts ? ', bm25(f) AS rank' : ''
+  if (useFts && (sort === 'relevance' || sort === 'new')) {
+    orderBy = 'rank ASC, datetime(m.created_at) DESC'
+  }
+  const sql = `
+    SELECT m.*, u.name AS author_name, u.id AS author_id${selectRank}
+    FROM materials m
+    JOIN users u ON u.id = m.user_id
+    ${joinFts}
+    ${whereSql}
+    ORDER BY ${orderBy}
+    LIMIT ? OFFSET ?
+  `
+  const allParams = [...params, Number(limit), Number(offset)]
+  return new Promise((resolve, reject) => {
+    db.all(sql, allParams, (err, rows) => (err ? reject(err) : resolve(rows)))
+  })
+}
+
+export function getBasicStats() {
+  return new Promise((resolve, reject) => {
+    const out = { total: 0, topSubjects: [], topGrades: [], popular: [], latest: [] }
+    db.get('SELECT COUNT(1) AS cnt FROM materials', [], (e, r) => {
+      out.total = (!e && r) ? Number(r.cnt) : 0
+      db.all('SELECT subject, COUNT(1) AS cnt FROM materials GROUP BY subject ORDER BY cnt DESC LIMIT 10', [], (e2, rows2) => {
+        out.topSubjects = rows2 || []
+        db.all('SELECT grade, COUNT(1) AS cnt FROM materials GROUP BY grade ORDER BY cnt DESC LIMIT 10', [], (e3, rows3) => {
+          out.topGrades = rows3 || []
+          db.all(`SELECT id, title, subject, grade, type, downloads, views, created_at FROM materials ORDER BY downloads DESC, views DESC LIMIT 10`, [], (e4, rows4) => {
+            out.popular = rows4 || []
+            db.all(`SELECT id, title, subject, grade, type, downloads, views, created_at FROM materials ORDER BY datetime(created_at) DESC LIMIT 10`, [], (e5, rows5) => {
+              out.latest = rows5 || []
+              resolve(out)
+            })
+          })
+        })
+      })
+    })
   })
 }
 
@@ -288,6 +396,49 @@ export function updateMaterial(id, fields) {
   const values = keys.map((k) => fields[k])
   return new Promise((resolve, reject) => {
     db.run(`UPDATE materials SET ${setters} WHERE id = ?`, [...values, id], function (err) {
+      if (err) return reject(err)
+      resolve({ changes: this.changes })
+    })
+  })
+}
+
+export function addFavorite(user_id, material_id) {
+  return new Promise((resolve, reject) => {
+    const created_at = new Date().toISOString()
+    db.run('INSERT OR IGNORE INTO favorites (user_id, material_id, created_at) VALUES (?, ?, ?)', [user_id, material_id, created_at], function (err) {
+      if (err) return reject(err)
+      resolve({ changes: this.changes })
+    })
+  })
+}
+
+export function removeFavorite(user_id, material_id) {
+  return new Promise((resolve, reject) => {
+    db.run('DELETE FROM favorites WHERE user_id = ? AND material_id = ?', [user_id, material_id], function (err) {
+      if (err) return reject(err)
+      resolve({ changes: this.changes })
+    })
+  })
+}
+
+export function listFavoriteMaterialIds(user_id) {
+  return new Promise((resolve, reject) => {
+    db.all('SELECT material_id FROM favorites WHERE user_id = ? ORDER BY datetime(created_at) DESC', [user_id], (err, rows) => (err ? reject(err) : resolve(rows.map(r => r.material_id))) )
+  })
+}
+
+export function incrementViews(material_id) {
+  return new Promise((resolve, reject) => {
+    db.run('UPDATE materials SET views = coalesce(views,0) + 1 WHERE id = ?', [material_id], function (err) {
+      if (err) return reject(err)
+      resolve({ changes: this.changes })
+    })
+  })
+}
+
+export function incrementDownloads(material_id) {
+  return new Promise((resolve, reject) => {
+    db.run('UPDATE materials SET downloads = coalesce(downloads,0) + 1 WHERE id = ?', [material_id], function (err) {
       if (err) return reject(err)
       resolve({ changes: this.changes })
     })

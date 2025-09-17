@@ -1,5 +1,6 @@
 import express from 'express'
 import morgan from 'morgan'
+import compression from 'compression'
 import cors from 'cors'
 import dotenv from 'dotenv'
 import bcrypt from 'bcryptjs'
@@ -10,7 +11,7 @@ import path from 'path'
 import { fileURLToPath } from 'url'
 import axios from 'axios'
 import { load as cheerioLoad } from 'cheerio'
-import { db, initDb, findUserByEmail, createUser, findUserById, createMaterial, listMaterials, listMaterialsByUser, findMaterialById, deleteMaterialById, updateUserProfile, updateUserPassword, createMaterialFile, listFilesByMaterialIds, updateMaterial, findMaterialFileById, deleteMaterialFileById } from './db.js'
+import { db, initDb, findUserByEmail, createUser, findUserById, createMaterial, listMaterials, listMaterialsByUser, listMaterialsFiltered, findMaterialById, deleteMaterialById, updateUserProfile, updateUserPassword, createMaterialFile, listFilesByMaterialIds, updateMaterial, findMaterialFileById, deleteMaterialFileById, addFavorite, removeFavorite, listFavoriteMaterialIds, incrementViews, incrementDownloads, getBasicStats } from './db.js'
 
 dotenv.config()
 const app = express()
@@ -19,7 +20,10 @@ const JWT_SECRET = process.env.JWT_SECRET || 'dev-secret'
 
 app.use(cors({ origin: true, credentials: true }))
 app.use(express.json())
-app.use(morgan('dev'))
+if (process.env.NODE_ENV !== 'production') {
+  app.use(morgan('dev'))
+}
+app.use(compression())
 // Avoid 304 Not Modified on JSON responses which breaks client auth flow (Axios treats 304 as error)
 app.set('etag', false)
 // Ensure auth endpoints are never cached
@@ -129,6 +133,14 @@ app.post('/api/auth/change-password', authMiddleware, async (req, res) => {
 })
 
 app.get('/api/health', (_req, res) => res.json({ ok: true }))
+app.get('/api/stats', async (_req, res) => {
+  try {
+    const stats = await getBasicStats()
+    res.json(stats)
+  } catch (e) {
+    res.status(500).json({ message: 'Server error' })
+  }
+})
 
 // Simple in-memory cache for news
 let informCache = { ts: 0, data: [] }
@@ -240,7 +252,7 @@ function expandPath(p) {
 
 const uploadsDir = process.env.UPLOADS_DIR ? expandPath(process.env.UPLOADS_DIR) : path.join(__dirname, 'uploads')
 if (!fs.existsSync(uploadsDir)) fs.mkdirSync(uploadsDir, { recursive: true })
-app.use('/uploads', express.static(uploadsDir))
+app.use('/uploads', express.static(uploadsDir, { maxAge: '7d', immutable: true }))
 
 // Multer config
 function decodeAndSanitizeOriginal(name) {
@@ -329,9 +341,18 @@ app.post('/api/materials', authMiddleware, (req, res) => {
 })
 
 // Public list of all materials
-app.get('/api/materials', async (_req, res) => {
+app.get('/api/materials', async (req, res) => {
   try {
-    const items = await listMaterials()
+    const { q = '', subject = '', grade = '', type = '', limit = '20', offset = '0', sort = 'new', favorite } = req.query || {}
+    const favoriteOfUserId = favorite && String(favorite) === '1' && req.headers.authorization ? (() => {
+      try {
+        const token = (req.headers.authorization || '').replace(/^Bearer\s+/i, '')
+        if (!token) return null
+        const payload = jwt.verify(token, JWT_SECRET)
+        return payload?.sub || null
+      } catch { return null }
+    })() : null
+    const items = await listMaterialsFiltered({ q: String(q || ''), subject: String(subject || ''), grade: String(grade || ''), type: String(type || ''), limit: Number(limit) || 20, offset: Number(offset) || 0, sort: String(sort || 'new'), favoriteOfUserId })
     const ids = items.map((m) => m.id)
     const files = await listFilesByMaterialIds(ids)
     const filesMap = files.reduce((acc, f) => {
@@ -360,6 +381,63 @@ app.get('/api/materials/mine', authMiddleware, async (req, res) => {
     }, {})
     const enriched = items.map((m) => ({ ...m, attachments: filesMap[m.id] || [] }))
     return res.json({ materials: enriched })
+  } catch (e) {
+    console.error(e)
+    return res.status(500).json({ message: 'Server error' })
+  }
+})
+
+// Favorites endpoints
+app.get('/api/materials/favorites', authMiddleware, async (req, res) => {
+  try {
+    // Reuse filtered list with favoriteOfUserId
+    const items = await listMaterialsFiltered({ favoriteOfUserId: req.user.sub, limit: 100, offset: 0, sort: 'new' })
+    const ids = items.map((m) => m.id)
+    const files = await listFilesByMaterialIds(ids)
+    const filesMap = files.reduce((acc, f) => { (acc[f.material_id] ||= []).push(f); return acc }, {})
+    const enriched = items.map((m) => ({ ...m, attachments: filesMap[m.id] || [] }))
+    return res.json({ materials: enriched })
+  } catch (e) {
+    console.error(e)
+    return res.status(500).json({ message: 'Server error' })
+  }
+})
+
+app.post('/api/materials/:id/favorite', authMiddleware, async (req, res) => {
+  try {
+    const id = Number(req.params.id)
+    if (!Number.isFinite(id)) return res.status(400).json({ message: 'Invalid id' })
+    const mat = await findMaterialById(id)
+    if (!mat) return res.status(404).json({ message: 'Not found' })
+    await addFavorite(req.user.sub, id)
+    return res.json({ ok: true })
+  } catch (e) {
+    console.error(e)
+    return res.status(500).json({ message: 'Server error' })
+  }
+})
+
+app.delete('/api/materials/:id/favorite', authMiddleware, async (req, res) => {
+  try {
+    const id = Number(req.params.id)
+    if (!Number.isFinite(id)) return res.status(400).json({ message: 'Invalid id' })
+    await removeFavorite(req.user.sub, id)
+    return res.json({ ok: true })
+  } catch (e) {
+    console.error(e)
+    return res.status(500).json({ message: 'Server error' })
+  }
+})
+
+// Views counter
+app.post('/api/materials/:id/view', async (req, res) => {
+  try {
+    const id = Number(req.params.id)
+    if (!Number.isFinite(id)) return res.status(400).json({ message: 'Invalid id' })
+    const mat = await findMaterialById(id)
+    if (!mat) return res.status(404).json({ message: 'Not found' })
+    await incrementViews(id)
+    return res.json({ ok: true })
   } catch (e) {
     console.error(e)
     return res.status(500).json({ message: 'Server error' })
@@ -584,6 +662,7 @@ app.get('/api/files/:id/download', async (req, res) => {
     const safeRel = path.basename(rel)
     const filePath = path.join(uploadsDir, safeRel)
     if (!fs.existsSync(filePath)) return res.status(404).json({ message: 'File not found' })
+    try { await incrementDownloads(row.material_id) } catch {}
     return res.download(filePath, row.file_name)
   } catch (e) {
     console.error(e)
@@ -729,7 +808,8 @@ app.get('/api/materials/:id/download', async (req, res) => {
     const rel = String(mat.file_url).slice(idx + '/uploads/'.length)
     const safeRel = path.basename(rel)
     const filePath = path.join(uploadsDir, safeRel)
-    if (!fs.existsSync(filePath)) return res.status(404).json({ message: 'File not found' })
+  if (!fs.existsSync(filePath)) return res.status(404).json({ message: 'File not found' })
+  try { await incrementDownloads(id) } catch {}
 
     // Let Express set proper Content-Disposition with original name
     return res.download(filePath, mat.file_name)

@@ -33,17 +33,11 @@
 				"server: dev",
 				"vite: dev"
 			],
-			"dependsOrder": "parallel"
-		},
-		{
-			"label": "vite: dev",
-			"type": "shell",
-			"command": "npm",
-			"args": [
-				"run",
-				"dev"
-			],
-			"group": "build"
+			"dependsOrder": "parallel",
+			"group": {
+				"kind": "build",
+				"isDefault": true
+			}
 		},
 		{
 			"label": "build",

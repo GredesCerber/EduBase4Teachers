@@ -1,7 +1,7 @@
-import type { SavedMaterial, UserMaterial } from '@/types/material'
+import type { UserMaterial } from '@/types/material'
 
 const KEY_MY = 'my-materials'
-const KEY_SAVED = 'saved-materials'
+// 'saved-materials' local cache has been removed; server favorites are the source of truth
 
 function safeParse<T>(raw: string | null, fallback: T): T {
   try {
@@ -19,14 +19,4 @@ export function getMyMaterials(): UserMaterial[] {
 export function setMyMaterials(list: UserMaterial[]) {
   if (typeof localStorage === 'undefined') return
   localStorage.setItem(KEY_MY, JSON.stringify(list))
-}
-
-export function getSavedMaterials(): SavedMaterial[] {
-  if (typeof localStorage === 'undefined') return []
-  return safeParse<SavedMaterial[]>(localStorage.getItem(KEY_SAVED), [])
-}
-
-export function setSavedMaterials(list: SavedMaterial[]) {
-  if (typeof localStorage === 'undefined') return
-  localStorage.setItem(KEY_SAVED, JSON.stringify(list))
 }

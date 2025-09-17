@@ -29,6 +29,8 @@ export interface UserMaterial {
   size?: number
   mimeType?: string
   createdAt: string
+  views?: number
+  downloads?: number
   // Additional attached files
   attachments?: Array<{
     id: number

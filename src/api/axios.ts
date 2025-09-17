@@ -1,7 +1,8 @@
 import axios from 'axios'
 
 export const api = axios.create({
-  baseURL: import.meta.env.VITE_API_BASE_URL || 'http://localhost:4000/api',
+  // Default to Vite proxy so a single origin works locally and via tunnels
+  baseURL: import.meta.env.VITE_API_BASE_URL || '/api',
   timeout: 10000,
 })
 
@@ -65,8 +66,19 @@ export async function createMaterial(data: {
   return res.data as { material: any }
 }
 
-export async function getMaterials() {
-  const res = await api.get('/materials')
+export type MaterialsQuery = Partial<{
+  q: string
+  subject: string
+  grade: string
+  type: string
+  sort: 'new' | 'popular' | 'relevance'
+  limit: number
+  offset: number
+  favorite: 0 | 1
+}>
+
+export async function getMaterials(params?: MaterialsQuery) {
+  const res = await api.get('/materials', { params })
   return res.data as { materials: any[] }
 }
 
@@ -171,4 +183,26 @@ export async function getInformNews() {
 export async function deleteMainFile(materialId: number | string) {
   const res = await api.delete(`/materials/${materialId}/main`)
   return res.data as { ok: boolean; material: any; files: any[] }
+}
+
+// Favorites (server-side)
+export async function addFavorite(materialId: number | string) {
+  const res = await api.post(`/materials/${materialId}/favorite`)
+  return res.data as { ok: boolean }
+}
+
+export async function removeFavorite(materialId: number | string) {
+  const res = await api.delete(`/materials/${materialId}/favorite`)
+  return res.data as { ok: boolean }
+}
+
+export async function getFavoriteMaterials() {
+  const res = await api.get('/materials/favorites')
+  return res.data as { materials: any[] }
+}
+
+// Optional counters
+export async function incrementView(materialId: number | string) {
+  const res = await api.post(`/materials/${materialId}/view`)
+  return res.data as { ok: boolean }
 }

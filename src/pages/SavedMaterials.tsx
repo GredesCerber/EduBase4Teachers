@@ -1,20 +1,19 @@
 import { useEffect, useMemo, useState } from 'react'
 import AccountNav from '@/components/AccountNav'
-import { getSavedMaterials, setSavedMaterials } from '@/utils/storage'
 import type { SavedMaterial, UserMaterial } from '@/types/material'
-import { getMaterials } from '@/api/axios'
+import { getFavoriteMaterials, removeFavorite as apiRemoveFavorite } from '@/api/axios'
 import StarButton from '@/components/StarButton'
 import ConfirmDialog from '@/components/ConfirmDialog'
 
 export default function SavedMaterials() {
-  const [saved, setSaved] = useState<SavedMaterial[]>(() => getSavedMaterials())
+  const [saved, setSaved] = useState<SavedMaterial[]>([])
   const [all, setAll] = useState<UserMaterial[]>([])
   const [confirmOpen, setConfirmOpen] = useState(false)
   const [pendingUnsaveId, setPendingUnsaveId] = useState<number | null>(null)
 
   useEffect(() => {
     (async () => {
-      const res = await getMaterials()
+      const res = await getFavoriteMaterials()
       const list: UserMaterial[] = res.materials.map((m: any) => ({
         id: String(m.id),
         title: m.title,
@@ -36,10 +35,6 @@ export default function SavedMaterials() {
     })()
   }, [])
 
-  useEffect(() => {
-    setSavedMaterials(saved)
-  }, [saved])
-
   const enriched = useMemo(() => {
     const map = new Map(all.map((m) => [Number(m.id), m]))
     return saved
@@ -52,9 +47,11 @@ export default function SavedMaterials() {
     setPendingUnsaveId(id)
     setConfirmOpen(true)
   }
-  const confirmUnsave = () => {
+  const confirmUnsave = async () => {
     if (pendingUnsaveId == null) return
+    try { await apiRemoveFavorite(pendingUnsaveId) } catch {}
     setSaved((prev) => prev.filter((x) => x.id !== pendingUnsaveId))
+    setAll((prev) => prev.filter((x) => Number(x.id) !== pendingUnsaveId))
     setPendingUnsaveId(null)
     setConfirmOpen(false)
   }
@@ -93,14 +90,14 @@ export default function SavedMaterials() {
                           <ul className="list-disc ml-5">
                             {hasLegacyMain && (
                               <li>
-                                <a href={`http://localhost:4000/api/materials/${m.id}/download`} className="underline">
+                                <a href={`/api/materials/${m.id}/download`} className="underline">
                                   {m.fileName || 'скачать основной файл'}
                                 </a>
                               </li>
                             )}
                             {mainFiles.map((f: any) => (
                               <li key={f.id}>
-                                <a href={`http://localhost:4000/api/files/${f.id}/download`} className="underline">{f.file_name}</a>
+                                <a href={`/api/files/${f.id}/download`} className="underline">{f.file_name}</a>
                               </li>
                             ))}
                           </ul>
@@ -112,7 +109,7 @@ export default function SavedMaterials() {
                           <ul className="list-disc ml-5">
                             {extraFiles.map((f: any) => (
                               <li key={f.id}>
-                                <a href={`http://localhost:4000/api/files/${f.id}/download`} className="underline">{f.file_name}</a>
+                                <a href={`/api/files/${f.id}/download`} className="underline">{f.file_name}</a>
                               </li>
                             ))}
                           </ul>

@@ -1,48 +1,52 @@
 import { Route, Routes, Navigate } from 'react-router-dom'
-import MainLayout from './layouts/MainLayout'
-import Home from './pages/Home'
-import Materials from './pages/Materials'
-import Notes from './pages/Notes'
-import Presentations from './pages/Presentations'
-import Programs from './pages/Programs'
-import Forum from './pages/Forum'
-import BestPractices from './pages/BestPractices'
-import MyMaterials from './pages/MyMaterials'
-import SavedMaterials from './pages/SavedMaterials'
-import Settings from './pages/Settings'
-import News from './pages/News'
-import About from './pages/About'
+import { Suspense, lazy } from 'react'
 import ProtectedRoute from '@/auth/ProtectedRoute'
-import Login from './pages/Login'
-import Register from './pages/Register'
-import NotFound from './pages/NotFound'
+
+const MainLayout = lazy(() => import('./layouts/MainLayout'))
+const Home = lazy(() => import('./pages/Home'))
+const Materials = lazy(() => import('./pages/Materials'))
+const Notes = lazy(() => import('./pages/Notes'))
+const Presentations = lazy(() => import('./pages/Presentations'))
+const Programs = lazy(() => import('./pages/Programs'))
+const Forum = lazy(() => import('./pages/Forum'))
+const BestPractices = lazy(() => import('./pages/BestPractices'))
+const MyMaterials = lazy(() => import('./pages/MyMaterials'))
+const SavedMaterials = lazy(() => import('./pages/SavedMaterials'))
+const Settings = lazy(() => import('./pages/Settings'))
+const News = lazy(() => import('./pages/News'))
+const About = lazy(() => import('./pages/About'))
+const Login = lazy(() => import('./pages/Login'))
+const Register = lazy(() => import('./pages/Register'))
+const NotFound = lazy(() => import('./pages/NotFound'))
 
 export default function App() {
   return (
-    <Routes>
-      <Route path="/" element={<MainLayout />}>
-        <Route index element={<Home />} />
-        <Route path="materials" element={<Materials />} />
-        <Route path="materials/notes" element={<Notes />} />
-        <Route path="materials/presentations" element={<Presentations />} />
-        <Route path="materials/programs" element={<Programs />} />
+    <Suspense fallback={<div className="p-4 text-slate-600">Загрузка…</div>}>
+      <Routes>
+        <Route path="/" element={<MainLayout />}>
+          <Route index element={<Home />} />
+          <Route path="materials" element={<Materials />} />
+          <Route path="materials/notes" element={<Notes />} />
+          <Route path="materials/presentations" element={<Presentations />} />
+          <Route path="materials/programs" element={<Programs />} />
 
-        <Route path="experience/forum" element={<Forum />} />
-        <Route path="experience/best-practices" element={<BestPractices />} />
-        <Route element={<ProtectedRoute />}>
-          <Route path="account/my" element={<MyMaterials />} />
-          <Route path="account/saved" element={<SavedMaterials />} />
-          <Route path="account/settings" element={<Settings />} />
+          <Route path="experience/forum" element={<Forum />} />
+          <Route path="experience/best-practices" element={<BestPractices />} />
+          <Route element={<ProtectedRoute />}>
+            <Route path="account/my" element={<MyMaterials />} />
+            <Route path="account/saved" element={<SavedMaterials />} />
+            <Route path="account/settings" element={<Settings />} />
+          </Route>
+
+          <Route path="news" element={<News />} />
+          <Route path="about" element={<About />} />
+          <Route path="contacts" element={<Navigate to="/about" replace />} />
+          <Route path="login" element={<Login />} />
+          <Route path="register" element={<Register />} />
+
+          <Route path="*" element={<NotFound />} />
         </Route>
-
-        <Route path="news" element={<News />} />
-  <Route path="about" element={<About />} />
-  <Route path="contacts" element={<Navigate to="/about" replace />} />
-        <Route path="login" element={<Login />} />
-        <Route path="register" element={<Register />} />
-
-        <Route path="*" element={<NotFound />} />
-      </Route>
-    </Routes>
+      </Routes>
+    </Suspense>
   )
 }

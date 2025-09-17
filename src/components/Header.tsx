@@ -1,6 +1,7 @@
 import { Link, NavLink, useLocation } from 'react-router-dom'
 import { useState } from 'react'
 import { useAuth } from '@/auth/AuthContext'
+import { useI18n } from '@/i18n/I18nContext'
 
 const navLinkClass = ({ isActive }: { isActive: boolean }) =>
   `px-3 py-2 rounded-md text-sm font-medium ${
@@ -9,6 +10,7 @@ const navLinkClass = ({ isActive }: { isActive: boolean }) =>
 
 export default function Header() {
   const { user, logout } = useAuth()
+  const { lang, setLang, t } = useI18n()
   const location = useLocation()
   const isExperienceActive = location.pathname.startsWith('/experience')
   const isAccountActive = location.pathname.startsWith('/account')
@@ -72,6 +74,12 @@ export default function Header() {
           <NavLink to="/about" className={navLinkClass}>
             О проекте
           </NavLink>
+          <div className="ml-2">
+            <select aria-label="Language" className="border rounded-md px-2 py-1 text-sm" value={lang} onChange={(e) => setLang(e.target.value as any)}>
+              <option value="ru">{t('lang_ru')}</option>
+              <option value="kk">{t('lang_kk')}</option>
+            </select>
+          </div>
           <div className="ml-3 pl-3 border-l">
             {!user ? (
               <div className="flex gap-1">
