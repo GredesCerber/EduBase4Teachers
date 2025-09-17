@@ -130,7 +130,7 @@ export default function Materials() {
             />
           </label>
 
-          <div className="grid gap-4 grid-cols-1 md:grid-cols-4 items-end">
+          <div className="grid gap-4 grid-cols-1 md:grid-cols-5 items-end">
             <label className="block">
               <span className="block text-sm font-medium mb-1">{t('subject')}</span>
               <select className="border rounded-md p-2 w-full" value={subject} onChange={(e) => setSubject(e.target.value)}>
@@ -166,7 +166,7 @@ export default function Materials() {
                 ))}
               </select>
             </label>
-            <div className="flex md:justify-end">
+            <div className="flex self-end md:justify-end md:justify-self-end">
               <button
                 type="button"
                 className="px-4 py-2 rounded-md border hover:bg-slate-50 bg-white"

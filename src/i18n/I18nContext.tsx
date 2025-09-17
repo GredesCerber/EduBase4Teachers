@@ -57,8 +57,6 @@ const RU: Dict = {
   addToFavorites: 'В избранное',
   removeFromFavorites: 'Убрать из избранного',
   loginToSave: 'Войдите, чтобы сохранять',
-  lang_ru: 'Рус',
-  lang_kk: 'Қаз',
   prev: 'Назад',
   next: 'Вперёд',
 }

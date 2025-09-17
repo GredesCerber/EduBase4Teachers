@@ -11,7 +11,7 @@ import path from 'path'
 import { fileURLToPath } from 'url'
 import axios from 'axios'
 import { load as cheerioLoad } from 'cheerio'
-import { db, initDb, findUserByEmail, createUser, findUserById, createMaterial, listMaterials, listMaterialsByUser, listMaterialsFiltered, findMaterialById, deleteMaterialById, updateUserProfile, updateUserPassword, createMaterialFile, listFilesByMaterialIds, updateMaterial, findMaterialFileById, deleteMaterialFileById, addFavorite, removeFavorite, listFavoriteMaterialIds, incrementViews, incrementDownloads, getBasicStats } from './db.js'
+import { db, initDb, findUserByEmail, createUser, findUserById, createMaterial, listMaterialsByUser, listMaterialsFiltered, findMaterialById, deleteMaterialById, updateUserProfile, updateUserPassword, createMaterialFile, listFilesByMaterialIds, updateMaterial, findMaterialFileById, deleteMaterialFileById, addFavorite, removeFavorite, listFavoriteMaterialIds, incrementViews, incrementDownloads, getBasicStats } from './db.js'
 
 dotenv.config()
 const app = express()

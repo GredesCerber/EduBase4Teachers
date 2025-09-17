@@ -215,18 +215,6 @@ export function createMaterial(data) {
   })
 }
 
-export function listMaterials() {
-  return new Promise((resolve, reject) => {
-    db.all(
-      `SELECT m.*, u.name AS author_name, u.id AS author_id
-       FROM materials m
-       JOIN users u ON u.id = m.user_id
-       ORDER BY datetime(m.created_at) DESC`,
-      [],
-      (err, rows) => (err ? reject(err) : resolve(rows))
-    )
-  })
-}
 
 export function listMaterialsFiltered({ q = '', subject = '', grade = '', type = '', limit = 20, offset = 0, sort = 'new', favoriteOfUserId = null } = {}) {
   const where = []
@@ -370,14 +358,6 @@ export function findMaterialFileById(id) {
   })
 }
 
-export function deleteFilesByMaterialId(material_id) {
-  return new Promise((resolve, reject) => {
-    db.run('DELETE FROM material_files WHERE material_id = ?', [material_id], function (err) {
-      if (err) return reject(err)
-      resolve({ changes: this.changes })
-    })
-  })
-}
 
 export function deleteMaterialFileById(id) {
   return new Promise((resolve, reject) => {
