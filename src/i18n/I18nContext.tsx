@@ -4,6 +4,22 @@ type Lang = 'ru' | 'kk'
 type Dict = Record<string, string>
 
 const RU: Dict = {
+  // Nav
+  nav_home: 'Главная',
+  nav_materials: 'Материалы',
+  nav_experience: 'Опыт учителей',
+  nav_forum: 'Форум',
+  nav_best: 'Лучшие практики',
+  nav_account: 'Личный кабинет',
+  nav_my: 'Мои материалы',
+  nav_saved: 'Мои сохранённые',
+  nav_settings: 'Настройки',
+  nav_news: 'Новости',
+  nav_about: 'О проекте',
+  nav_login: 'Войти',
+  nav_register: 'Регистрация',
+  nav_logout: 'Выйти',
+  nav_menu_open: 'Открыть меню',
   searchByTitle: 'Поиск по названию',
   searchPlaceholder: 'Начните вводить название материала',
   subject: 'Предмет',
@@ -48,6 +64,22 @@ const RU: Dict = {
 }
 
 const KK: Dict = {
+  // Nav
+  nav_home: 'Басты бет',
+  nav_materials: 'Материалдар',
+  nav_experience: 'Мұғалімдер тәжірибесі',
+  nav_forum: 'Форум',
+  nav_best: 'Ең жақсы тәжірибелер',
+  nav_account: 'Жеке кабинет',
+  nav_my: 'Менің материалдарым',
+  nav_saved: 'Сақталғандарым',
+  nav_settings: 'Баптаулар',
+  nav_news: 'Жаңалықтар',
+  nav_about: 'Жоба туралы',
+  nav_login: 'Кіру',
+  nav_register: 'Тіркелу',
+  nav_logout: 'Шығу',
+  nav_menu_open: 'Мәзірді ашу',
   searchByTitle: 'Атауы бойынша іздеу',
   searchPlaceholder: 'Материал атауын енгізіңіз',
   subject: 'Пән',

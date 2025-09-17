@@ -23,56 +23,56 @@ export default function Header() {
         </Link>
         <button
           className="md:hidden p-2 rounded hover:bg-sky-100"
-          aria-label="Открыть меню"
+          aria-label={t('nav_menu_open')}
           onClick={() => setOpen((v) => !v)}
         >
           ☰
         </button>
         <nav className="hidden md:flex gap-1 items-center">
-          <NavLink to="/" className={navLinkClass}>Главная</NavLink>
+          <NavLink to="/" className={navLinkClass}>{t('nav_home')}</NavLink>
           <NavLink to="/materials" className={navLinkClass}>
-            Материалы
+            {t('nav_materials')}
           </NavLink>
           <div className="relative group">
             <Link to="/experience/forum" className={navLinkClass({ isActive: isExperienceActive })}>
-              Опыт учителей
+              {t('nav_experience')}
             </Link>
             <div className="absolute left-0 top-full z-20 w-56 bg-white border rounded-md shadow-md p-2 flex flex-col
                             opacity-0 invisible translate-y-1 pointer-events-none transition
                             group-hover:opacity-100 group-hover:visible group-hover:translate-y-0 group-hover:pointer-events-auto">
               <NavLink to="/experience/forum" className={navLinkClass}>
-                Форум
+                {t('nav_forum')}
               </NavLink>
               <NavLink to="/experience/best-practices" className={navLinkClass}>
-                Лучшие практики
+                {t('nav_best')}
               </NavLink>
             </div>
           </div>
           {user && (
             <div className="relative group">
               <Link to="/account/my" className={navLinkClass({ isActive: isAccountActive })}>
-                Личный кабинет
+                {t('nav_account')}
               </Link>
               <div className="absolute left-0 top-full z-20 w-56 bg-white border rounded-md shadow-md p-2 flex flex-col
                               opacity-0 invisible translate-y-1 pointer-events-none transition
                               group-hover:opacity-100 group-hover:visible group-hover:translate-y-0 group-hover:pointer-events-auto">
                 <NavLink to="/account/my" className={navLinkClass}>
-                  Мои материалы
+                  {t('nav_my')}
                 </NavLink>
                 <NavLink to="/account/saved" className={navLinkClass}>
-                  Мои сохранённые
+                  {t('nav_saved')}
                 </NavLink>
                 <NavLink to="/account/settings" className={navLinkClass}>
-                  Настройки
+                  {t('nav_settings')}
                 </NavLink>
               </div>
             </div>
           )}
           <NavLink to="/news" className={navLinkClass}>
-            Новости
+            {t('nav_news')}
           </NavLink>
           <NavLink to="/about" className={navLinkClass}>
-            О проекте
+            {t('nav_about')}
           </NavLink>
           <div className="ml-2">
             <select aria-label="Language" className="border rounded-md px-2 py-1 text-sm" value={lang} onChange={(e) => setLang(e.target.value as any)}>
@@ -83,8 +83,8 @@ export default function Header() {
           <div className="ml-3 pl-3 border-l">
             {!user ? (
               <div className="flex gap-1">
-                <NavLink to="/login" className={navLinkClass}>Войти</NavLink>
-                <NavLink to="/register" className={navLinkClass}>Регистрация</NavLink>
+                <NavLink to="/login" className={navLinkClass}>{t('nav_login')}</NavLink>
+                <NavLink to="/register" className={navLinkClass}>{t('nav_register')}</NavLink>
               </div>
             ) : (
               <div className="flex items-center gap-2">
@@ -93,7 +93,7 @@ export default function Header() {
                   onClick={logout}
                   className="btn btn-primary"
                 >
-                  Выйти
+                  {t('nav_logout')}
                 </button>
               </div>
             )}
@@ -102,26 +102,26 @@ export default function Header() {
         {open && (
           <div className="md:hidden absolute left-0 right-0 top-16 bg-white border-b shadow-sm">
             <div className="container py-2 flex flex-col gap-1">
-              <NavLink to="/" className={navLinkClass} onClick={() => setOpen(false)}>Главная</NavLink>
-              <NavLink to="/materials" className={navLinkClass} onClick={() => setOpen(false)}>Материалы</NavLink>
-              <NavLink to="/experience/forum" className={navLinkClass} onClick={() => setOpen(false)}>Опыт учителей</NavLink>
-              <NavLink to="/news" className={navLinkClass} onClick={() => setOpen(false)}>Новости</NavLink>
-              <NavLink to="/about" className={navLinkClass} onClick={() => setOpen(false)}>О проекте</NavLink>
+              <NavLink to="/" className={navLinkClass} onClick={() => setOpen(false)}>{t('nav_home')}</NavLink>
+              <NavLink to="/materials" className={navLinkClass} onClick={() => setOpen(false)}>{t('nav_materials')}</NavLink>
+              <NavLink to="/experience/forum" className={navLinkClass} onClick={() => setOpen(false)}>{t('nav_experience')}</NavLink>
+              <NavLink to="/news" className={navLinkClass} onClick={() => setOpen(false)}>{t('nav_news')}</NavLink>
+              <NavLink to="/about" className={navLinkClass} onClick={() => setOpen(false)}>{t('nav_about')}</NavLink>
               {!user ? (
                 <>
-                  <NavLink to="/login" className={navLinkClass} onClick={() => setOpen(false)}>Войти</NavLink>
-                  <NavLink to="/register" className={navLinkClass} onClick={() => setOpen(false)}>Регистрация</NavLink>
+                  <NavLink to="/login" className={navLinkClass} onClick={() => setOpen(false)}>{t('nav_login')}</NavLink>
+                  <NavLink to="/register" className={navLinkClass} onClick={() => setOpen(false)}>{t('nav_register')}</NavLink>
                 </>
               ) : (
                 <>
-                  <NavLink to="/account/my" className={navLinkClass} onClick={() => setOpen(false)}>Мои материалы</NavLink>
-                  <NavLink to="/account/saved" className={navLinkClass} onClick={() => setOpen(false)}>Мои сохранённые</NavLink>
-                  <NavLink to="/account/settings" className={navLinkClass} onClick={() => setOpen(false)}>Настройки</NavLink>
+                  <NavLink to="/account/my" className={navLinkClass} onClick={() => setOpen(false)}>{t('nav_my')}</NavLink>
+                  <NavLink to="/account/saved" className={navLinkClass} onClick={() => setOpen(false)}>{t('nav_saved')}</NavLink>
+                  <NavLink to="/account/settings" className={navLinkClass} onClick={() => setOpen(false)}>{t('nav_settings')}</NavLink>
                   <button
                     onClick={() => { logout(); setOpen(false) }}
                     className="btn btn-primary text-left"
                   >
-                    Выйти
+                    {t('nav_logout')}
                   </button>
                 </>
               )}
