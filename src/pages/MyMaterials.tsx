@@ -230,7 +230,7 @@ export default function MyMaterials() {
                 accept=".doc,.docx,.ppt,.pptx,.pdf,.jpg,.jpeg,.png"
                 multiple
                 onSelect={(files) => setForm((s) => ({ ...s, files: files || [], file: (files && files[0]) || null }))}
-                hint="Можно выбрать несколько: первый станет основным, остальные — доп."
+                hint="Выберите один или несколько файлов — все будут отмечены как основные"
                 key={fileKey}
               />
               <FileInput label="Дополнительные файлы (опционально)" accept=".doc,.docx,.ppt,.pptx,.pdf,.jpg,.jpeg,.png" multiple onSelect={(files) => setForm((s) => ({ ...s, extraFiles: files || [] }))} hint="Можно выбрать несколько файлов" key={extraKey} />
