@@ -1,6 +1,6 @@
-import { createContext, useContext, useMemo, useState } from 'react'
+import { createContext, useContext, useMemo } from 'react'
 
-type Lang = 'ru' | 'kk'
+type Lang = 'ru'
 type Dict = Record<string, string>
 
 const RU: Dict = {
@@ -63,75 +63,15 @@ const RU: Dict = {
   next: 'Вперёд',
 }
 
-const KK: Dict = {
-  // Nav
-  nav_home: 'Басты бет',
-  nav_materials: 'Материалдар',
-  nav_experience: 'Мұғалімдер тәжірибесі',
-  nav_forum: 'Форум',
-  nav_best: 'Ең жақсы тәжірибелер',
-  nav_account: 'Жеке кабинет',
-  nav_my: 'Менің материалдарым',
-  nav_saved: 'Сақталғандарым',
-  nav_settings: 'Баптаулар',
-  nav_news: 'Жаңалықтар',
-  nav_about: 'Жоба туралы',
-  nav_login: 'Кіру',
-  nav_register: 'Тіркелу',
-  nav_logout: 'Шығу',
-  nav_menu_open: 'Мәзірді ашу',
-  searchByTitle: 'Атауы бойынша іздеу',
-  searchPlaceholder: 'Материал атауын енгізіңіз',
-  subject: 'Пән',
-  allSubjects: 'Барлық пәндер',
-  type: 'Түрі',
-  allTypes: 'Барлық түрлері',
-  sort: 'Сұрыптау',
-  sort_new: 'Алдымен жаңалары',
-  sort_popular: 'Танымал',
-  sort_relevance: 'Сәйкестік бойынша',
-  grade: 'Сынып',
-  allGrades: 'Барлық сыныптар',
-  resetFilters: 'Фильтрлерді тазалау',
-  activeFilters: 'Белсенді фильтрлер:',
-  search: 'Іздеу',
-  materialsList: 'Материалдар тізімі',
-  gradeLabel: 'сынып',
-  author: 'Автор',
-  views: 'Қаралымдар',
-  downloads: 'Жүктеулер',
-  link: 'Сілтеме',
-  open: 'ашу',
-  mainFiles: 'Негізгі файлдар',
-  extraFiles: 'Қосымша файлдар',
-  downloadMain: 'негізгі файлды жүктеу',
-  preview: 'Превью',
-  viewInBrowser: 'Ашу',
-  filePreview: 'Файл алдын ала қарау',
-  previewNotAvailable: 'Бұл файл түріне алдын ала қарау жоқ',
-  noMaterials: 'Әзірше материалдар жоқ',
-  removeSavedTitle: 'Сақталғандардан жою?',
-  removeSavedDesc: 'Материал сақталғандар тізімінен жойылады.',
-  remove: 'Жою',
-  cancel: 'Болдырмау',
-  addToFavorites: 'Таңдаулыларға',
-  removeFromFavorites: 'Таңдаулылардан жою',
-  loginToSave: 'Сақтау үшін кіріңіз',
-  lang_ru: 'Рус',
-  lang_kk: 'Қаз',
-  prev: 'Артқа',
-  next: 'Алға',
-}
-
-const dicts: Record<Lang, Dict> = { ru: RU, kk: KK }
+const dicts: Record<Lang, Dict> = { ru: RU }
 
 type Ctx = { lang: Lang; setLang: (l: Lang) => void; t: (k: string) => string }
 const Ctx = createContext<Ctx | null>(null)
 
 export function I18nProvider({ children }: { children: React.ReactNode }) {
-  const [lang, setLang] = useState<Lang>((localStorage.getItem('lang') as Lang) || 'ru')
-  const t = (k: string) => (dicts[lang]?.[k] || dicts['ru']?.[k] || k)
-  const value = useMemo(() => ({ lang, setLang: (l: Lang) => { localStorage.setItem('lang', l); setLang(l) }, t }), [lang])
+  const lang: Lang = 'ru'
+  const t = (k: string) => (dicts['ru']?.[k] || k)
+  const value = useMemo(() => ({ lang, setLang: () => {}, t }), [])
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>
 }
 

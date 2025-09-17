@@ -4,13 +4,13 @@ import { useAuth } from '@/auth/AuthContext'
 import { useI18n } from '@/i18n/I18nContext'
 
 const navLinkClass = ({ isActive }: { isActive: boolean }) =>
-  `px-3 py-2 rounded-md text-sm font-medium ${
+  `px-3 py-2 rounded-md text-sm font-medium whitespace-nowrap leading-tight ${
     isActive ? 'bg-primary-100 text-primary-900' : 'text-slate-700 hover:bg-sky-100'
   }`
 
 export default function Header() {
   const { user, logout } = useAuth()
-  const { lang, setLang, t } = useI18n()
+  const { t } = useI18n()
   const location = useLocation()
   const isExperienceActive = location.pathname.startsWith('/experience')
   const isAccountActive = location.pathname.startsWith('/account')
@@ -28,7 +28,7 @@ export default function Header() {
         >
           ☰
         </button>
-        <nav className="hidden md:flex gap-1 items-center">
+  <nav className="hidden md:flex gap-2 items-center">
           <NavLink to="/" className={navLinkClass}>{t('nav_home')}</NavLink>
           <NavLink to="/materials" className={navLinkClass}>
             {t('nav_materials')}
@@ -37,7 +37,7 @@ export default function Header() {
             <Link to="/experience/forum" className={navLinkClass({ isActive: isExperienceActive })}>
               {t('nav_experience')}
             </Link>
-            <div className="absolute left-0 top-full z-20 w-56 bg-white border rounded-md shadow-md p-2 flex flex-col
+            <div className="absolute left-0 top-full z-20 w-64 bg-white border rounded-md shadow-md p-2 flex flex-col
                             opacity-0 invisible translate-y-1 pointer-events-none transition
                             group-hover:opacity-100 group-hover:visible group-hover:translate-y-0 group-hover:pointer-events-auto">
               <NavLink to="/experience/forum" className={navLinkClass}>
@@ -53,7 +53,7 @@ export default function Header() {
               <Link to="/account/my" className={navLinkClass({ isActive: isAccountActive })}>
                 {t('nav_account')}
               </Link>
-              <div className="absolute left-0 top-full z-20 w-56 bg-white border rounded-md shadow-md p-2 flex flex-col
+              <div className="absolute left-0 top-full z-20 w-64 bg-white border rounded-md shadow-md p-2 flex flex-col
                               opacity-0 invisible translate-y-1 pointer-events-none transition
                               group-hover:opacity-100 group-hover:visible group-hover:translate-y-0 group-hover:pointer-events-auto">
                 <NavLink to="/account/my" className={navLinkClass}>
@@ -74,12 +74,7 @@ export default function Header() {
           <NavLink to="/about" className={navLinkClass}>
             {t('nav_about')}
           </NavLink>
-          <div className="ml-2">
-            <select aria-label="Language" className="border rounded-md px-2 py-1 text-sm" value={lang} onChange={(e) => setLang(e.target.value as any)}>
-              <option value="ru">{t('lang_ru')}</option>
-              <option value="kk">{t('lang_kk')}</option>
-            </select>
-          </div>
+          {/* Language selector removed (RU only) */}
           <div className="ml-3 pl-3 border-l">
             {!user ? (
               <div className="flex gap-1">
@@ -102,11 +97,11 @@ export default function Header() {
         {open && (
           <div className="md:hidden absolute left-0 right-0 top-16 bg-white border-b shadow-sm">
             <div className="container py-2 flex flex-col gap-1">
-              <NavLink to="/" className={navLinkClass} onClick={() => setOpen(false)}>{t('nav_home')}</NavLink>
-              <NavLink to="/materials" className={navLinkClass} onClick={() => setOpen(false)}>{t('nav_materials')}</NavLink>
-              <NavLink to="/experience/forum" className={navLinkClass} onClick={() => setOpen(false)}>{t('nav_experience')}</NavLink>
-              <NavLink to="/news" className={navLinkClass} onClick={() => setOpen(false)}>{t('nav_news')}</NavLink>
-              <NavLink to="/about" className={navLinkClass} onClick={() => setOpen(false)}>{t('nav_about')}</NavLink>
+              <NavLink to="/" className={`${navLinkClass({ isActive: false })} whitespace-nowrap`} onClick={() => setOpen(false)}>{t('nav_home')}</NavLink>
+              <NavLink to="/materials" className={`${navLinkClass({ isActive: false })} whitespace-nowrap`} onClick={() => setOpen(false)}>{t('nav_materials')}</NavLink>
+              <NavLink to="/experience/forum" className={`${navLinkClass({ isActive: false })} whitespace-nowrap`} onClick={() => setOpen(false)}>{t('nav_experience')}</NavLink>
+              <NavLink to="/news" className={`${navLinkClass({ isActive: false })} whitespace-nowrap`} onClick={() => setOpen(false)}>{t('nav_news')}</NavLink>
+              <NavLink to="/about" className={`${navLinkClass({ isActive: false })} whitespace-nowrap`} onClick={() => setOpen(false)}>{t('nav_about')}</NavLink>
               {!user ? (
                 <>
                   <NavLink to="/login" className={navLinkClass} onClick={() => setOpen(false)}>{t('nav_login')}</NavLink>
@@ -114,9 +109,9 @@ export default function Header() {
                 </>
               ) : (
                 <>
-                  <NavLink to="/account/my" className={navLinkClass} onClick={() => setOpen(false)}>{t('nav_my')}</NavLink>
-                  <NavLink to="/account/saved" className={navLinkClass} onClick={() => setOpen(false)}>{t('nav_saved')}</NavLink>
-                  <NavLink to="/account/settings" className={navLinkClass} onClick={() => setOpen(false)}>{t('nav_settings')}</NavLink>
+                  <NavLink to="/account/my" className={`${navLinkClass({ isActive: false })} whitespace-nowrap`} onClick={() => setOpen(false)}>{t('nav_my')}</NavLink>
+                  <NavLink to="/account/saved" className={`${navLinkClass({ isActive: false })} whitespace-nowrap`} onClick={() => setOpen(false)}>{t('nav_saved')}</NavLink>
+                  <NavLink to="/account/settings" className={`${navLinkClass({ isActive: false })} whitespace-nowrap`} onClick={() => setOpen(false)}>{t('nav_settings')}</NavLink>
                   <button
                     onClick={() => { logout(); setOpen(false) }}
                     className="btn btn-primary text-left"
