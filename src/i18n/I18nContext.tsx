@@ -20,6 +20,7 @@ const RU: Dict = {
   nav_register: 'Регистрация',
   nav_logout: 'Выйти',
   nav_menu_open: 'Открыть меню',
+  // Materials filters/list
   searchByTitle: 'Поиск по названию',
   searchPlaceholder: 'Начните вводить название материала',
   subject: 'Предмет',
@@ -63,8 +64,8 @@ const RU: Dict = {
 
 const dicts: Record<Lang, Dict> = { ru: RU }
 
-type Ctx = { lang: Lang; setLang: (l: Lang) => void; t: (k: string) => string }
-const Ctx = createContext<Ctx | null>(null)
+type I18nCtx = { lang: Lang; setLang: (l: Lang) => void; t: (k: string) => string }
+const Ctx = createContext<I18nCtx | null>(null)
 
 export function I18nProvider({ children }: { children: React.ReactNode }) {
   const lang: Lang = 'ru'

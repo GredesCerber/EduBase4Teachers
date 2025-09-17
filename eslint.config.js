@@ -51,7 +51,7 @@ export default [
     },
   },
   {
-    files: ['**/*.{js,jsx}'],
+    files: ['**/*.{js,jsx,mjs,cjs}'],
     languageOptions: { ecmaVersion: 'latest', sourceType: 'module', globals: { window: 'readonly', document: 'readonly', navigator: 'readonly', localStorage: 'readonly', FormData: 'readonly', File: 'readonly', Blob: 'readonly', alert: 'readonly', confirm: 'readonly', console: 'readonly' } },
     plugins: {
       react: reactPlugin,

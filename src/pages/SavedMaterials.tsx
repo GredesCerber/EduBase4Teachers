@@ -49,7 +49,9 @@ export default function SavedMaterials() {
   }
   const confirmUnsave = async () => {
     if (pendingUnsaveId == null) return
-    try { await apiRemoveFavorite(pendingUnsaveId) } catch {}
+    try { await apiRemoveFavorite(pendingUnsaveId) } catch {
+      // ignore
+    }
     setSaved((prev) => prev.filter((x) => x.id !== pendingUnsaveId))
     setAll((prev) => prev.filter((x) => Number(x.id) !== pendingUnsaveId))
     setPendingUnsaveId(null)

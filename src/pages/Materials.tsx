@@ -86,24 +86,7 @@ export default function Materials() {
   }, [user?.id])
 
   const isSaved = (id: number | string) => saved.some((s) => s.id === Number(id))
-  const toggleSaved = (m: UserMaterial) => {
-    const idNum = Number(m.id)
-    const mine = user && m.authorId === user.id
-    if (mine) return // do not allow saving own materials
-    if (isSaved(idNum)) {
-      setPendingUnsaveId(idNum)
-      setConfirmOpen(true)
-    } else {
-      const entry: SavedMaterial = {
-        id: idNum,
-        title: m.title,
-        subject: m.subject,
-        grade: m.grade,
-        type: m.type,
-      }
-      setSaved((prev) => [entry, ...prev])
-    }
-  }
+  // toggleSaved handled inline in StarButton onClick with server sync
 
   const confirmUnsave = () => {
     if (pendingUnsaveId == null) return
@@ -295,7 +278,7 @@ export default function Materials() {
                         const entry: SavedMaterial = { id: idNum, title: m.title, subject: m.subject, grade: m.grade, type: m.type }
                         setSaved((prev) => [entry, ...prev])
                       }
-                    } catch (e: any) {
+                    } catch {
                       // ignore
                     }
                   }}
@@ -331,7 +314,6 @@ export default function Materials() {
         {preview && (
           <div className="w-full h-[70vh]">
             {preview.type.startsWith('image/') ? (
-              // eslint-disable-next-line @next/next/no-img-element
               <img src={preview.url} alt={preview.name || ''} className="max-h-full max-w-full object-contain mx-auto" />
             ) : preview.type === 'application/pdf' ? (
               <iframe src={preview.url} title={preview.name || 'PDF'} className="w-full h-full border" />
