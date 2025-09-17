@@ -114,6 +114,42 @@ export default function Materials() {
 
   const list = useMemo(() => items, [items])
 
+  // Helpers for preview URLs and file type checks
+  const getProxiedPath = (url?: string) => {
+    if (!url) return ''
+    try {
+      // If absolute, prefer using only pathname to leverage Vite proxy (/uploads)
+      const u = new URL(url, window.location.origin)
+      return u.pathname // e.g., /uploads/...
+    } catch {
+      return url // already relative
+    }
+  }
+
+  const isOfficeMime = (mime?: string) => {
+    if (!mime) return false
+    return [
+      'application/msword',
+      'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+      'application/vnd.ms-powerpoint',
+      'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+    ].includes(mime)
+  }
+
+  const hasOfficeExt = (name?: string) => {
+    if (!name) return false
+    const n = name.toLowerCase()
+    return n.endsWith('.doc') || n.endsWith('.docx') || n.endsWith('.ppt') || n.endsWith('.pptx')
+  }
+
+  const makeOfficeViewerUrl = (fileUrl: string) => {
+    const origin = window.location.origin
+    const proxied = getProxiedPath(fileUrl)
+    const abs = `${origin}${proxied}`
+    // Office Web Viewer requires a publicly accessible URL (HTTPS recommended)
+    return `https://view.officeapps.live.com/op/embed.aspx?src=${encodeURIComponent(abs)}`
+  }
+
   return (
     <div className="space-y-6 max-w-5xl">
       <h1 className="text-2xl font-bold">Материалы</h1>
@@ -223,10 +259,28 @@ export default function Materials() {
                                     {m.fileName || t('downloadMain')}
                                   </a>
                                   {m.mimeType?.startsWith('image/') && m.fileUrl && (
-                                    <button className="text-primary-700 underline" onClick={() => setPreview({ url: m.fileUrl!, type: m.mimeType!, name: m.fileName })}>{t('preview')}</button>
+                                    <button
+                                      className="text-primary-700 underline"
+                                      onClick={() => setPreview({ url: getProxiedPath(m.fileUrl!), type: m.mimeType!, name: m.fileName })}
+                                    >
+                                      {t('preview')}
+                                    </button>
                                   )}
                                   {m.mimeType === 'application/pdf' && m.fileUrl && (
-                                    <button className="text-primary-700 underline" onClick={() => setPreview({ url: m.fileUrl!, type: m.mimeType!, name: m.fileName })}>{t('viewInBrowser')}</button>
+                                    <button
+                                      className="text-primary-700 underline"
+                                      onClick={() => setPreview({ url: getProxiedPath(m.fileUrl!), type: m.mimeType!, name: m.fileName })}
+                                    >
+                                      {t('viewInBrowser')}
+                                    </button>
+                                  )}
+                                  {(isOfficeMime(m.mimeType) || hasOfficeExt(m.fileName)) && m.fileUrl && (
+                                    <button
+                                      className="text-primary-700 underline"
+                                      onClick={() => setPreview({ url: makeOfficeViewerUrl(m.fileUrl!), type: 'office', name: m.fileName })}
+                                    >
+                                      {t('viewInBrowser')}
+                                    </button>
                                   )}
                                 </div>
                               </li>
@@ -236,10 +290,28 @@ export default function Materials() {
                                 <div className="flex items-center gap-3">
                                   <a href={`/api/files/${f.id}/download`} className="underline">{f.file_name}</a>
                                   {String(f.mime_type || '').startsWith('image/') && f.file_url && (
-                                    <button className="text-primary-700 underline" onClick={() => setPreview({ url: f.file_url, type: f.mime_type, name: f.file_name })}>{t('preview')}</button>
+                                    <button
+                                      className="text-primary-700 underline"
+                                      onClick={() => setPreview({ url: getProxiedPath(f.file_url), type: f.mime_type, name: f.file_name })}
+                                    >
+                                      {t('preview')}
+                                    </button>
                                   )}
                                   {f.mime_type === 'application/pdf' && f.file_url && (
-                                    <button className="text-primary-700 underline" onClick={() => setPreview({ url: f.file_url, type: f.mime_type, name: f.file_name })}>{t('viewInBrowser')}</button>
+                                    <button
+                                      className="text-primary-700 underline"
+                                      onClick={() => setPreview({ url: getProxiedPath(f.file_url), type: f.mime_type, name: f.file_name })}
+                                    >
+                                      {t('viewInBrowser')}
+                                    </button>
+                                  )}
+                                  {(isOfficeMime(f.mime_type) || hasOfficeExt(f.file_name)) && f.file_url && (
+                                    <button
+                                      className="text-primary-700 underline"
+                                      onClick={() => setPreview({ url: makeOfficeViewerUrl(f.file_url), type: 'office', name: f.file_name })}
+                                    >
+                                      {t('viewInBrowser')}
+                                    </button>
                                   )}
                                 </div>
                               </li>
@@ -256,10 +328,28 @@ export default function Materials() {
                                 <div className="flex items-center gap-3">
                                   <a href={`/api/files/${f.id}/download`} className="underline">{f.file_name}</a>
                                   {String(f.mime_type || '').startsWith('image/') && f.file_url && (
-                                    <button className="text-primary-700 underline" onClick={() => setPreview({ url: f.file_url, type: f.mime_type, name: f.file_name })}>{t('preview')}</button>
+                                    <button
+                                      className="text-primary-700 underline"
+                                      onClick={() => setPreview({ url: getProxiedPath(f.file_url), type: f.mime_type, name: f.file_name })}
+                                    >
+                                      {t('preview')}
+                                    </button>
                                   )}
                                   {f.mime_type === 'application/pdf' && f.file_url && (
-                                    <button className="text-primary-700 underline" onClick={() => setPreview({ url: f.file_url, type: f.mime_type, name: f.file_name })}>{t('viewInBrowser')}</button>
+                                    <button
+                                      className="text-primary-700 underline"
+                                      onClick={() => setPreview({ url: getProxiedPath(f.file_url), type: f.mime_type, name: f.file_name })}
+                                    >
+                                      {t('viewInBrowser')}
+                                    </button>
+                                  )}
+                                  {(isOfficeMime(f.mime_type) || hasOfficeExt(f.file_name)) && f.file_url && (
+                                    <button
+                                      className="text-primary-700 underline"
+                                      onClick={() => setPreview({ url: makeOfficeViewerUrl(f.file_url), type: 'office', name: f.file_name })}
+                                    >
+                                      {t('viewInBrowser')}
+                                    </button>
                                   )}
                                 </div>
                               </li>
@@ -335,6 +425,8 @@ export default function Materials() {
               <img src={preview.url} alt={preview.name || ''} className="max-h-full max-w-full object-contain mx-auto" />
             ) : preview.type === 'application/pdf' ? (
               <iframe src={preview.url} title={preview.name || 'PDF'} className="w-full h-full border" />
+            ) : preview.type === 'office' ? (
+              <iframe src={preview.url} title={preview.name || 'Office'} className="w-full h-full border" />
             ) : (
               <div className="text-sm text-slate-600">{t('previewNotAvailable')}</div>
             )}
