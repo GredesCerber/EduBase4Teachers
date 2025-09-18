@@ -11,12 +11,17 @@ import path from 'path'
 import { fileURLToPath } from 'url'
 import axios from 'axios'
 import { load as cheerioLoad } from 'cheerio'
-import { db, initDb, findUserByEmail, createUser, findUserById, createMaterial, listMaterialsByUser, listMaterialsFiltered, findMaterialById, deleteMaterialById, updateUserProfile, updateUserPassword, createMaterialFile, listFilesByMaterialIds, updateMaterial, findMaterialFileById, deleteMaterialFileById, addFavorite, removeFavorite, listFavoriteMaterialIds, incrementViews, incrementDownloads, getBasicStats } from './db.js'
+import { db, initDb, findUserByEmail, createUser, findUserById, createMaterial, listMaterialsByUser, listMaterialsFiltered, findMaterialById, deleteMaterialById, updateUserProfile, updateUserPassword, createMaterialFile, listFilesByMaterialIds, updateMaterial, findMaterialFileById, deleteMaterialFileById, addFavorite, removeFavorite, listFavoriteMaterialIds, incrementViews, incrementDownloads, getBasicStats, createForumThread, listForumThreads, getForumThread, createForumPost, addForumPostFile, listForumPosts, listForumFilesByPostIds, listForumReactionsByPostIds, toggleForumReaction, countThreadLikes, userLikedThread, toggleThreadLike } from './db.js'
 
 dotenv.config()
 const app = express()
 const PORT = process.env.PORT || 4000
 const JWT_SECRET = process.env.JWT_SECRET || 'dev-secret'
+
+// Security and proxy sanity
+app.disable('x-powered-by')
+// If you use tunnels or reverse proxies in dev, this helps Express compute protocol/host correctly
+app.set('trust proxy', true)
 
 app.use(cors({ origin: true, credentials: true }))
 app.use(express.json())
@@ -36,8 +41,31 @@ app.use((req, res, next) => {
 
 initDb()
 
+// Promote any existing users whose emails are in ADMIN_EMAILS/ADMIN_EMAIL at startup
+function syncAdminEmails() {
+  try {
+    const adminList = String(process.env.ADMIN_EMAILS || process.env.ADMIN_EMAIL || '')
+      .split(/[,;\s]+/)
+      .map((s) => s.trim().toLowerCase())
+      .filter(Boolean)
+    if (!adminList.length) return
+    const placeholders = adminList.map(() => '?').join(',')
+    db.run(`UPDATE users SET is_admin = 1 WHERE lower(email) IN (${placeholders})`, adminList, function (err) {
+      if (err) {
+        console.error('Failed to sync admin emails:', err)
+      } else if (typeof this?.changes === 'number' && this.changes > 0) {
+        console.log(`Synced admin emails: promoted ${this.changes} user(s) to admin`)
+      }
+    })
+  } catch (e) {
+    console.error('Error during admin sync:', e)
+  }
+}
+
+syncAdminEmails()
+
 function signToken(user) {
-  return jwt.sign({ sub: user.id, email: user.email, name: user.name }, JWT_SECRET, { expiresIn: '7d' })
+  return jwt.sign({ sub: user.id, email: user.email, name: user.name, is_admin: !!user.is_admin }, JWT_SECRET, { expiresIn: '7d' })
 }
 
 function authMiddleware(req, res, next) {
@@ -53,6 +81,18 @@ function authMiddleware(req, res, next) {
   }
 }
 
+// Optional auth: attach req.user if token is valid, otherwise continue silently
+function optionalAuth(req, _res, next) {
+  const auth = req.headers.authorization || ''
+  const token = auth.startsWith('Bearer ') ? auth.slice(7) : null
+  if (!token) return next()
+  try {
+    const payload = jwt.verify(token, JWT_SECRET)
+    req.user = payload
+  } catch {}
+  next()
+}
+
 app.post('/api/auth/register', async (req, res) => {
   try {
     const { email, name, password } = req.body
@@ -62,7 +102,7 @@ app.post('/api/auth/register', async (req, res) => {
     const password_hash = await bcrypt.hash(password, 10)
     const user = await createUser({ email, name, password_hash })
     const token = signToken(user)
-    return res.status(201).json({ token, user: { id: user.id, email: user.email, name: user.name } })
+    return res.status(201).json({ token, user: { id: user.id, email: user.email, name: user.name, is_admin: !!user.is_admin } })
   } catch (e) {
     console.error(e)
     return res.status(500).json({ message: 'Server error' })
@@ -75,10 +115,22 @@ app.post('/api/auth/login', async (req, res) => {
     if (!email || !password) return res.status(400).json({ message: 'Missing fields' })
   const user = await findUserByEmail(email)
   if (!user) return res.status(401).json({ message: 'Неверный логин или пароль' })
-    const ok = await bcrypt.compare(password, user.password_hash)
+  const ok = await bcrypt.compare(password, user.password_hash)
   if (!ok) return res.status(401).json({ message: 'Неверный логин или пароль' })
+    // Auto-promote to admin if email is now in ADMIN_EMAILS
+    try {
+      const adminList = String(process.env.ADMIN_EMAILS || process.env.ADMIN_EMAIL || '')
+        .split(/[,;\s]+/)
+        .map((s) => s.trim().toLowerCase())
+        .filter(Boolean)
+      const shouldBeAdmin = adminList.includes(String(user.email).toLowerCase())
+      if (shouldBeAdmin && !user.is_admin) {
+        await new Promise((resolve, reject) => db.run('UPDATE users SET is_admin = 1 WHERE id = ?', [user.id], function (err) { if (err) reject(err); else resolve() }))
+        user.is_admin = 1
+      }
+    } catch {}
     const token = signToken(user)
-    return res.json({ token, user: { id: user.id, email: user.email, name: user.name } })
+    return res.json({ token, user: { id: user.id, email: user.email, name: user.name, is_admin: !!user.is_admin } })
   } catch (e) {
     console.error(e)
     return res.status(500).json({ message: 'Server error' })
@@ -89,6 +141,18 @@ app.get('/api/auth/me', authMiddleware, async (req, res) => {
   try {
     const user = await findUserById(req.user.sub)
     if (!user) return res.status(404).json({ message: 'Not found' })
+    // Auto-promote here as well so existing sessions reflect admin without re-login
+    try {
+      const adminList = String(process.env.ADMIN_EMAILS || process.env.ADMIN_EMAIL || '')
+        .split(/[,;\s]+/)
+        .map((s) => s.trim().toLowerCase())
+        .filter(Boolean)
+      const shouldBeAdmin = adminList.includes(String(user.email).toLowerCase())
+      if (shouldBeAdmin && !user.is_admin) {
+        await new Promise((resolve, reject) => db.run('UPDATE users SET is_admin = 1 WHERE id = ?', [user.id], function (err) { if (err) reject(err); else resolve() }))
+        user.is_admin = 1
+      }
+    } catch {}
     return res.json({ user })
   } catch (e) {
     console.error(e)
@@ -142,6 +206,172 @@ app.get('/api/stats', async (_req, res) => {
   }
 })
 
+// Simple 404 for unknown API routes
+app.use('/api', (_req, res) => {
+  res.status(404).json({ message: 'Not found' })
+})
+
+// Central error handler (keeps logs cleaner)
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+app.use((err, _req, res, _next) => {
+  console.error(err)
+  res.status(500).json({ message: 'Server error' })
+})
+
+// Forum endpoints
+// List threads
+app.get('/api/forum/threads', optionalAuth, async (req, res) => {
+  try {
+    const { q = '', limit = 20, offset = 0, sort = 'new' } = req.query
+    const safeSort = ['new','top','active'].includes(String(sort)) ? String(sort) : 'new'
+    // Build orderBy SQL fragment
+    let orderBy = 'datetime(coalesce(t.last_post_at, t.created_at)) DESC'
+    if (safeSort === 'top') orderBy = 'likes_count DESC, datetime(coalesce(t.last_post_at, t.created_at)) DESC'
+    if (safeSort === 'active') orderBy = 'datetime(coalesce(t.last_post_at, t.created_at)) DESC'
+    // list with dynamic order; we inject the fragment by string replace in db layer call
+    const items = await listForumThreads({ q, limit, offset, sort: safeSort })
+    // If user authenticated, mark my_like
+    const uid = req.user?.sub || null
+    if (uid) {
+      for (const t of items) {
+        t.my_like = await new Promise((resolve) => db.get('SELECT 1 FROM forum_thread_likes WHERE thread_id = ? AND user_id = ?', [t.id, uid], (e, r) => resolve(!!r)))
+      }
+    }
+    res.json({ threads: items })
+  } catch (e) {
+    console.error(e)
+    res.status(500).json({ message: 'Server error' })
+  }
+})
+
+// Create thread (auth)
+app.post('/api/forum/threads', authMiddleware, async (req, res) => {
+  try {
+    const { title } = req.body
+    if (!title || String(title).trim().length < 3) return res.status(400).json({ message: 'Слишком короткий заголовок' })
+    const th = await createForumThread({ user_id: req.user.sub, title: String(title).trim() })
+    res.status(201).json({ thread: th })
+  } catch (e) {
+    console.error(e)
+    res.status(500).json({ message: 'Server error' })
+  }
+})
+
+// Get a thread with posts (optional auth to include my reactions)
+app.get('/api/forum/threads/:id', optionalAuth, async (req, res) => {
+  try {
+    const id = Number(req.params.id)
+    if (!Number.isFinite(id)) return res.status(400).json({ message: 'Invalid id' })
+    const thread = await getForumThread(id)
+    if (!thread) return res.status(404).json({ message: 'Not found' })
+  const posts = await listForumPosts(id, { limit: 200, offset: 0 })
+    const postIds = posts.map((p) => p.id)
+    const files = await listForumFilesByPostIds(postIds)
+    const reactions = await listForumReactionsByPostIds(postIds)
+    const groupedFiles = new Map()
+    for (const f of files) {
+      const arr = groupedFiles.get(f.post_id) || []
+      arr.push(f)
+      groupedFiles.set(f.post_id, arr)
+    }
+    const groupedReactions = new Map()
+    for (const r of reactions) {
+      const arr = groupedReactions.get(r.post_id) || []
+      arr.push(r)
+      groupedReactions.set(r.post_id, arr)
+    }
+    const userId = req.user?.sub || null
+    const enriched = posts.map((p) => {
+      const pf = groupedFiles.get(p.id) || []
+      const pr = groupedReactions.get(p.id) || []
+      const likes = pr.filter((r) => r.type === 'like').length
+      const dislikes = pr.filter((r) => r.type === 'dislike').length
+      const emojiCounts = {}
+      for (const r of pr) if (r.type === 'emoji' && r.emoji) {
+        emojiCounts[r.emoji] = (emojiCounts[r.emoji] || 0) + 1
+      }
+      const my = userId ? pr.filter((r) => r.user_id === userId).map((r) => ({ type: r.type, emoji: r.emoji || null })) : []
+      return { ...p, files: pf, reactions: { likes, dislikes, emojis: emojiCounts, my } }
+    })
+    // Add likes meta for thread
+    const likes = await countThreadLikes(id)
+    const my_like = req.user?.sub ? await userLikedThread(id, req.user.sub) : false
+    res.json({ thread: { ...thread, likes_count: likes, my_like }, posts: enriched })
+  } catch (e) {
+    console.error(e)
+    res.status(500).json({ message: 'Server error' })
+  }
+})
+
+// Toggle like for a thread
+app.post('/api/forum/threads/:id/like', authMiddleware, async (req, res) => {
+  try {
+    const id = Number(req.params.id)
+    if (!Number.isFinite(id)) return res.status(400).json({ message: 'Invalid id' })
+    await toggleThreadLike({ thread_id: id, user_id: req.user.sub })
+    const likes = await countThreadLikes(id)
+    const my_like = await userLikedThread(id, req.user.sub)
+    res.json({ likes_count: likes, my_like })
+  } catch (e) {
+    console.error(e)
+    res.status(500).json({ message: 'Server error' })
+  }
+})
+
+// Post a message with optional files (auth)
+app.post('/api/forum/threads/:id/posts', authMiddleware, (req, res) => {
+  forumUpload.array('files', 10)(req, res, async (err) => {
+    try {
+      if (err) return res.status(400).json({ message: err.message || 'Upload error' })
+      const id = Number(req.params.id)
+      if (!Number.isFinite(id)) return res.status(400).json({ message: 'Invalid id' })
+      const content = String(req.body.content || '').trim()
+      if (!content && (!req.files || !Array.isArray(req.files) || req.files.length === 0)) {
+        return res.status(400).json({ message: 'Пустое сообщение' })
+      }
+      const post = await createForumPost({ thread_id: id, user_id: req.user.sub, content })
+      const base = `${req.protocol}://${req.get('host')}`
+      const files = Array.isArray(req.files) ? req.files : []
+      for (const f of files) {
+        try {
+          const name = decodeAndSanitizeOriginal(f.originalname)
+          await addForumPostFile({ post_id: post.id, file_url: `${base}/uploads/${f.filename}`, file_name: name, size: f.size, mime_type: f.mimetype })
+        } catch {}
+      }
+      return res.status(201).json({ postId: post.id })
+    } catch (e) {
+      console.error(e)
+      return res.status(500).json({ message: 'Server error' })
+    }
+  })
+})
+
+// Toggle reaction for a post (auth)
+app.post('/api/forum/posts/:id/react', authMiddleware, async (req, res) => {
+  try {
+    const id = Number(req.params.id)
+    if (!Number.isFinite(id)) return res.status(400).json({ message: 'Invalid id' })
+    const { type, emoji } = req.body
+    const allowed = ['like', 'dislike', 'emoji']
+    if (!allowed.includes(String(type))) return res.status(400).json({ message: 'Invalid reaction' })
+    await toggleForumReaction({ post_id: id, user_id: req.user.sub, type: String(type), emoji: emoji ? String(emoji) : null })
+    // Return updated counts for this post
+    const rs = await listForumReactionsByPostIds([id])
+    const pr = rs.filter((r) => r.post_id === id)
+    const likes = pr.filter((r) => r.type === 'like').length
+    const dislikes = pr.filter((r) => r.type === 'dislike').length
+    const emojiCounts = {}
+    for (const r of pr) if (r.type === 'emoji' && r.emoji) {
+      emojiCounts[r.emoji] = (emojiCounts[r.emoji] || 0) + 1
+    }
+    const my = pr.filter((r) => r.user_id === req.user.sub).map((r) => ({ type: r.type, emoji: r.emoji || null }))
+    res.json({ reactions: { likes, dislikes, emojis: emojiCounts, my } })
+  } catch (e) {
+    console.error(e)
+    res.status(500).json({ message: 'Server error' })
+  }
+})
+
 // Simple in-memory cache for news
 let informCache = { ts: 0, data: [] }
 const INFORM_URL = 'https://www.inform.kz/category/obrazovanie_s501'
@@ -152,7 +382,12 @@ app.get('/api/news/inform', async (_req, res) => {
     if (informCache.data.length && now - informCache.ts < 5 * 60 * 1000) {
       return res.json({ items: informCache.data, cached: true })
     }
-    const response = await axios.get(INFORM_URL, { headers: { 'User-Agent': 'Mozilla/5.0 (compatible; EduBaseBot/1.0)' }, timeout: 10000 })
+    const commonHeaders = {
+      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+      'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
+      'Accept-Language': 'ru-RU,ru;q=0.9,en-US;q=0.8,en;q=0.7',
+    }
+    const response = await axios.get(INFORM_URL, { headers: commonHeaders, timeout: 12000 })
     const $ = cheerioLoad(response.data)
 
     const items = []
@@ -176,14 +411,26 @@ app.get('/api/news/inform', async (_req, res) => {
 
     function extractImage(root) {
       const img = root.find('img').first()
-      const pic = root.find('picture source').first()
-      let src = img.attr('data-src') || img.attr('data-original') || img.attr('data-lazy-src') || img.attr('src') || ''
-      if (!src) {
-        const ss = pic.attr('srcset') || img.attr('srcset') || ''
-        if (ss) src = pickFromSrcset(ss)
+      let candidates = []
+      // Common lazy attrs
+      const imgSrc = img.attr('data-src') || img.attr('data-original') || img.attr('data-lazy-src') || img.attr('data-lazysrc') || img.attr('data-ll-src') || img.attr('src') || ''
+      const imgSrcset = img.attr('data-srcset') || img.attr('data-lazy-srcset') || img.attr('srcset') || ''
+      if (imgSrcset) candidates.push(pickFromSrcset(imgSrcset))
+      if (imgSrc) candidates.push(imgSrc)
+      // All <source> in <picture>
+      root.find('picture source').each((_, s) => {
+        const ss = (s.attribs && (s.attribs['data-srcset'] || s.attribs['srcset'])) || ''
+        if (ss) candidates.push(pickFromSrcset(ss))
+      })
+      // Fallback: any element with background-image style
+      const styleBg = (root.attr('style') || '').match(/background-image:\s*url\(['\"]?([^'\")]+)['\"]?\)/i)
+      if (styleBg && styleBg[1]) candidates.push(styleBg[1])
+      // Normalize and pick the first valid
+      for (const c of candidates.map((x) => (x || '').trim()).filter(Boolean)) {
+        const abs = absolutize(c)
+        if (abs && !abs.startsWith('data:')) return abs
       }
-      src = (src || '').trim()
-      return absolutize(src)
+      return ''
     }
 
     function isLikelyAd({ root, title, href, image }) {
@@ -228,6 +475,34 @@ app.get('/api/news/inform', async (_req, res) => {
           }
         }
       })
+    }
+    // Optional enhancement: fetch OG image for first few items where image is missing
+    const needOg = items.filter((it) => !it.image).slice(0, 8)
+    if (needOg.length) {
+      await Promise.all(
+        needOg.map(async (it) => {
+          try {
+            const page = await axios.get(it.url, { headers: commonHeaders, timeout: 8000 })
+            const $$ = cheerioLoad(page.data)
+            const og = $$('meta[property="og:image"]').attr('content') || $$('meta[name="twitter:image"]').attr('content') || ''
+            let img = og || ''
+            if (!img) {
+              // try first article image
+              const aimg = $$('article img').first()
+              img = aimg.attr('data-src') || aimg.attr('data-original') || aimg.attr('data-lazy-src') || aimg.attr('src') || ''
+              if (!img) {
+                const ss = aimg.attr('data-srcset') || aimg.attr('srcset') || ''
+                if (ss) img = pickFromSrcset(ss)
+              }
+            }
+            img = (img || '').trim()
+            if (img) {
+              const abs = absolutize(img)
+              if (abs && !abs.startsWith('data:')) it.image = abs
+            }
+          } catch {}
+        })
+      )
     }
     informCache = { ts: now, data: items.slice(0, 20) }
     return res.json({ items: informCache.data, cached: false })
@@ -295,6 +570,42 @@ const upload = multer({
   },
 })
 
+// Forum uploads: allow a broader, but still safe set of types
+const allowedForumMimes = new Set([
+  'application/pdf',
+  'application/msword',
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  'application/vnd.ms-excel',
+  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  'application/vnd.ms-powerpoint',
+  'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+  'text/plain',
+  'image/jpeg',
+  'image/png',
+  'image/gif',
+  'image/webp',
+  'application/zip',
+  'application/x-zip-compressed',
+  'application/x-rar-compressed',
+  'application/vnd.rar',
+  'application/x-7z-compressed',
+])
+
+const forumUpload = multer({
+  storage,
+  limits: { fileSize: 20 * 1024 * 1024 },
+  fileFilter: (_req, file, cb) => {
+    if (allowedForumMimes.has(file.mimetype)) return cb(null, true)
+    // Allow some files that come as octet-stream based on extension
+    if (file.mimetype === 'application/octet-stream') {
+      const ext = String(file.originalname || '').toLowerCase().split('.').pop()
+      const allowedExt = new Set(['pdf','doc','docx','ppt','pptx','xls','xlsx','txt','jpg','jpeg','png','gif','webp','zip','rar','7z'])
+      if (ext && allowedExt.has(ext)) return cb(null, true)
+    }
+    return cb(new Error('Unsupported file type'))
+  },
+})
+
 // Create material with optional file upload (auth required)
 app.post('/api/materials', authMiddleware, (req, res) => {
   upload.array('file', 10)(req, res, async (err) => {
@@ -344,6 +655,17 @@ app.post('/api/materials', authMiddleware, (req, res) => {
 app.get('/api/materials', async (req, res) => {
   try {
     const { q = '', subject = '', grade = '', type = '', limit = '20', offset = '0', sort = 'new', favorite } = req.query || {}
+    // Normalize and clamp inputs to prevent abuse and reduce SQL injection surface
+    const clamp = (n, min, max, d) => { const v = Number.isFinite(Number(n)) ? Number(n) : d; return Math.min(Math.max(v, min), max) }
+    const norm = {
+      q: String(q || '').slice(0, 200),
+      subject: String(subject || '').slice(0, 100),
+      grade: String(grade || '').slice(0, 100),
+      type: String(type || '').slice(0, 100),
+      limit: clamp(limit, 1, 100, 20),
+      offset: clamp(offset, 0, 10000, 0),
+      sort: ['new', 'popular', 'relevance'].includes(String(sort)) ? String(sort) : 'new',
+    }
     const favoriteOfUserId = favorite && String(favorite) === '1' && req.headers.authorization ? (() => {
       try {
         const token = (req.headers.authorization || '').replace(/^Bearer\s+/i, '')
@@ -352,7 +674,7 @@ app.get('/api/materials', async (req, res) => {
         return payload?.sub || null
       } catch { return null }
     })() : null
-    const items = await listMaterialsFiltered({ q: String(q || ''), subject: String(subject || ''), grade: String(grade || ''), type: String(type || ''), limit: Number(limit) || 20, offset: Number(offset) || 0, sort: String(sort || 'new'), favoriteOfUserId })
+    const items = await listMaterialsFiltered({ q: norm.q, subject: norm.subject, grade: norm.grade, type: norm.type, limit: norm.limit, offset: norm.offset, sort: norm.sort, favoriteOfUserId })
     const ids = items.map((m) => m.id)
     const files = await listFilesByMaterialIds(ids)
     const filesMap = files.reduce((acc, f) => {
@@ -444,14 +766,14 @@ app.post('/api/materials/:id/view', async (req, res) => {
   }
 })
 
-// Delete a material completely (DB row + uploaded file). Only owner can delete.
+// Delete a material completely (DB row + uploaded file). Only owner or admin can delete.
 app.delete('/api/materials/:id', authMiddleware, async (req, res) => {
   try {
     const id = Number(req.params.id)
     if (!Number.isFinite(id)) return res.status(400).json({ message: 'Invalid id' })
     const mat = await findMaterialById(id)
     if (!mat) return res.status(404).json({ message: 'Not found' })
-    if (mat.user_id !== req.user.sub) return res.status(403).json({ message: 'Forbidden' })
+  if (mat.user_id !== req.user.sub && !req.user.is_admin) return res.status(403).json({ message: 'Forbidden' })
 
     // Remove file if exists
     if (mat.file_url) {
@@ -496,7 +818,7 @@ app.delete('/api/materials/:id', authMiddleware, async (req, res) => {
   }
 })
 
-// Edit material fields (owner only)
+// Edit material fields (owner or admin)
 app.put('/api/materials/:id', authMiddleware, (req, res) => {
   upload.single('file')(req, res, async (err) => {
     try {
@@ -505,7 +827,7 @@ app.put('/api/materials/:id', authMiddleware, (req, res) => {
       if (!Number.isFinite(id)) return res.status(400).json({ message: 'Invalid id' })
       const mat = await findMaterialById(id)
       if (!mat) return res.status(404).json({ message: 'Not found' })
-      if (mat.user_id !== req.user.sub) return res.status(403).json({ message: 'Forbidden' })
+  if (mat.user_id !== req.user.sub && !req.user.is_admin) return res.status(403).json({ message: 'Forbidden' })
 
       const { title, subject, grade, type, description, link } = req.body
       const fields = {}
@@ -547,7 +869,7 @@ app.put('/api/materials/:id', authMiddleware, (req, res) => {
   })
 })
 
-// Upload additional files for a material (owner only)
+// Upload additional files for a material (owner or admin)
 app.post('/api/materials/:id/files', authMiddleware, (req, res) => {
   upload.array('files', 10)(req, res, async (err) => {
     try {
@@ -556,7 +878,7 @@ app.post('/api/materials/:id/files', authMiddleware, (req, res) => {
       if (!Number.isFinite(id)) return res.status(400).json({ message: 'Invalid id' })
       const mat = await findMaterialById(id)
       if (!mat) return res.status(404).json({ message: 'Not found' })
-      if (mat.user_id !== req.user.sub) return res.status(403).json({ message: 'Forbidden' })
+  if (mat.user_id !== req.user.sub && !req.user.is_admin) return res.status(403).json({ message: 'Forbidden' })
       const base = `${req.protocol}://${req.get('host')}`
       const result = []
       for (const f of req.files || []) {
@@ -578,7 +900,7 @@ app.post('/api/materials/:id/files', authMiddleware, (req, res) => {
   })
 })
 
-// Upload additional MAIN files for a material (owner only) — does not replace existing main file
+// Upload additional MAIN files for a material (owner or admin) — does not replace existing main file
 app.post('/api/materials/:id/mains', authMiddleware, (req, res) => {
   upload.array('files', 10)(req, res, async (err) => {
     try {
@@ -587,7 +909,7 @@ app.post('/api/materials/:id/mains', authMiddleware, (req, res) => {
       if (!Number.isFinite(id)) return res.status(400).json({ message: 'Invalid id' })
       const mat = await findMaterialById(id)
       if (!mat) return res.status(404).json({ message: 'Not found' })
-      if (mat.user_id !== req.user.sub) return res.status(403).json({ message: 'Forbidden' })
+  if (mat.user_id !== req.user.sub && !req.user.is_admin) return res.status(403).json({ message: 'Forbidden' })
       const base = `${req.protocol}://${req.get('host')}`
       const result = []
       for (const f of req.files || []) {
@@ -610,7 +932,7 @@ app.post('/api/materials/:id/mains', authMiddleware, (req, res) => {
   })
 })
 
-// Mark existing attachment as MAIN (owner only); does not demote others
+// Mark existing attachment as MAIN (owner or admin); does not demote others
 app.post('/api/files/:id/mark-main', authMiddleware, async (req, res) => {
   try {
     const id = Number(req.params.id)
@@ -619,7 +941,7 @@ app.post('/api/files/:id/mark-main', authMiddleware, async (req, res) => {
     if (!row) return res.status(404).json({ message: 'Not found' })
     const mat = await findMaterialById(row.material_id)
     if (!mat) return res.status(404).json({ message: 'Not found' })
-    if (mat.user_id !== req.user.sub) return res.status(403).json({ message: 'Forbidden' })
+  if (mat.user_id !== req.user.sub && !req.user.is_admin) return res.status(403).json({ message: 'Forbidden' })
     await updateMaterial(row.material_id, {}) // no-op to ensure id is valid
     // Set flag
     await new Promise((resolve, reject) => {
@@ -670,7 +992,7 @@ app.get('/api/files/:id/download', async (req, res) => {
   }
 })
 
-// Delete individual attachment file (owner only)
+// Delete individual attachment file (owner or admin)
 app.delete('/api/files/:id', authMiddleware, async (req, res) => {
   try {
     const id = Number(req.params.id)
@@ -679,7 +1001,7 @@ app.delete('/api/files/:id', authMiddleware, async (req, res) => {
     if (!row) return res.status(404).json({ message: 'Not found' })
     const mat = await findMaterialById(row.material_id)
     if (!mat) return res.status(404).json({ message: 'Not found' })
-    if (mat.user_id !== req.user.sub) return res.status(403).json({ message: 'Forbidden' })
+  if (mat.user_id !== req.user.sub && !req.user.is_admin) return res.status(403).json({ message: 'Forbidden' })
 
     // Enforce at least one file must remain for the material
     const allFiles = await listFilesByMaterialIds([row.material_id])
@@ -709,14 +1031,14 @@ app.delete('/api/files/:id', authMiddleware, async (req, res) => {
   }
 })
 
-// Delete legacy main file of a material (owner only); requires at least one other file to remain
+// Delete legacy main file of a material (owner or admin); requires at least one other file to remain
 app.delete('/api/materials/:id/main', authMiddleware, async (req, res) => {
   try {
     const id = Number(req.params.id)
     if (!Number.isFinite(id)) return res.status(400).json({ message: 'Invalid id' })
     const mat = await findMaterialById(id)
     if (!mat) return res.status(404).json({ message: 'Not found' })
-    if (mat.user_id !== req.user.sub) return res.status(403).json({ message: 'Forbidden' })
+  if (mat.user_id !== req.user.sub && !req.user.is_admin) return res.status(403).json({ message: 'Forbidden' })
     if (!mat.file_url) return res.status(400).json({ message: 'Нет основного файла' })
 
     const others = await listFilesByMaterialIds([id])
@@ -748,7 +1070,7 @@ app.delete('/api/materials/:id/main', authMiddleware, async (req, res) => {
   }
 })
 
-// Promote an attachment to be the main file of a material (owner only)
+// Promote an attachment to be the main file of a material (owner or admin)
 app.post('/api/materials/:id/files/:fileId/make-main', authMiddleware, async (req, res) => {
   try {
     const id = Number(req.params.id)
@@ -756,7 +1078,7 @@ app.post('/api/materials/:id/files/:fileId/make-main', authMiddleware, async (re
     if (!Number.isFinite(id) || !Number.isFinite(fileId)) return res.status(400).json({ message: 'Invalid id' })
     const mat = await findMaterialById(id)
     if (!mat) return res.status(404).json({ message: 'Not found' })
-    if (mat.user_id !== req.user.sub) return res.status(403).json({ message: 'Forbidden' })
+  if (mat.user_id !== req.user.sub && !req.user.is_admin) return res.status(403).json({ message: 'Forbidden' })
     const row = await findMaterialFileById(fileId)
     if (!row || row.material_id !== id) return res.status(404).json({ message: 'File not found' })
 

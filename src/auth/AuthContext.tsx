@@ -1,7 +1,7 @@
 import { createContext, useContext, useEffect, useMemo, useState } from 'react'
 import { api } from '@/api/axios'
 
-export type User = { id: number; email: string; name: string }
+export type User = { id: number; email: string; name: string; is_admin?: boolean }
 
 type AuthCtx = {
   user: User | null
@@ -27,7 +27,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setToken(t)
       api
         .get('/auth/me')
-        .then((res) => setUser(res.data.user))
+  .then((res) => setUser(res.data.user))
         .catch(() => localStorage.removeItem('token'))
         .finally(() => setLoading(false))
     } else {
@@ -39,7 +39,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setError(null)
     const payload = { email: String(email).trim().toLowerCase(), password: String(password).trim() }
     const res = await api.post('/auth/login', payload)
-    setUser(res.data.user)
+  setUser(res.data.user)
     setToken(res.data.token)
     localStorage.setItem('token', res.data.token)
   }
@@ -48,7 +48,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setError(null)
     const payload = { name: String(name).trim(), email: String(email).trim().toLowerCase(), password: String(password).trim() }
     const res = await api.post('/auth/register', payload)
-    setUser(res.data.user)
+  setUser(res.data.user)
     setToken(res.data.token)
     localStorage.setItem('token', res.data.token)
   }

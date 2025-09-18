@@ -16,7 +16,7 @@ export default function Header() {
   const isAccountActive = location.pathname.startsWith('/account')
   const [open, setOpen] = useState(false)
   return (
-    <header className="border-b bg-white/80 backdrop-blur sticky top-0 z-10">
+    <header className="fixed top-0 inset-x-0 z-20 bg-white border-b shadow-sm">
       <div className="container flex items-center justify-between h-16">
         <Link to="/" className="font-bold text-primary-700 text-lg">
           EduBase4Teachers
@@ -33,6 +33,11 @@ export default function Header() {
           <NavLink to="/materials" className={navLinkClass}>
             {t('nav_materials')}
           </NavLink>
+          {user?.is_admin ? (
+            <NavLink to="/admin/materials" className={navLinkClass}>
+              Админ
+            </NavLink>
+          ) : null}
           <div className="relative group">
             <Link to="/experience/forum" className={navLinkClass({ isActive: isExperienceActive })}>
               {t('nav_experience')}
@@ -65,6 +70,11 @@ export default function Header() {
                 <NavLink to="/account/settings" className={navLinkClass}>
                   {t('nav_settings')}
                 </NavLink>
+                {user.is_admin ? (
+                  <NavLink to="/admin/materials" className={navLinkClass}>
+                    Админ: Материалы
+                  </NavLink>
+                ) : null}
               </div>
             </div>
           )}
@@ -84,6 +94,16 @@ export default function Header() {
             ) : (
               <div className="flex items-center gap-2">
                 <span className="text-sm text-slate-700">{user.name}</span>
+                {user.is_admin ? (
+                  <span
+                    className="px-2 py-0.5 rounded-full text-[10px] sm:text-xs font-medium bg-primary-100 text-primary-800 border border-primary-200"
+                    title="Администратор"
+                    aria-label="Admin badge"
+                    role="status"
+                  >
+                    Admin
+                  </span>
+                ) : null}
                 <button
                   onClick={logout}
                   className="btn btn-primary"
@@ -112,6 +132,9 @@ export default function Header() {
                   <NavLink to="/account/my" className={`${navLinkClass({ isActive: false })} whitespace-nowrap`} onClick={() => setOpen(false)}>{t('nav_my')}</NavLink>
                   <NavLink to="/account/saved" className={`${navLinkClass({ isActive: false })} whitespace-nowrap`} onClick={() => setOpen(false)}>{t('nav_saved')}</NavLink>
                   <NavLink to="/account/settings" className={`${navLinkClass({ isActive: false })} whitespace-nowrap`} onClick={() => setOpen(false)}>{t('nav_settings')}</NavLink>
+                  {user.is_admin ? (
+                    <NavLink to="/admin/materials" className={`${navLinkClass({ isActive: false })} whitespace-nowrap`} onClick={() => setOpen(false)}>Админ: Материалы</NavLink>
+                  ) : null}
                   <button
                     onClick={() => { logout(); setOpen(false) }}
                     className="btn btn-primary text-left"

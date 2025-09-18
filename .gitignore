@@ -54,3 +54,10 @@ coverage/
 
 ## Misc
 *.pem
+
+# ngrok (keep your system-level install, ignore any repo-local configs/logs)
+ngrok.yml
+.ngrok.yml
+.ngrok/
+.ngrok2/
+ngrok.log

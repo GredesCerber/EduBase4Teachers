@@ -1,12 +1,11 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useState } from 'react'
 import AccountNav from '@/components/AccountNav'
-import type { SavedMaterial, UserMaterial } from '@/types/material'
+import type { UserMaterial } from '@/types/material'
 import { getFavoriteMaterials, removeFavorite as apiRemoveFavorite } from '@/api/axios'
 import StarButton from '@/components/StarButton'
 import ConfirmDialog from '@/components/ConfirmDialog'
 
 export default function SavedMaterials() {
-  const [saved, setSaved] = useState<SavedMaterial[]>([])
   const [all, setAll] = useState<UserMaterial[]>([])
   const [confirmOpen, setConfirmOpen] = useState(false)
   const [pendingUnsaveId, setPendingUnsaveId] = useState<number | null>(null)
@@ -35,14 +34,7 @@ export default function SavedMaterials() {
     })()
   }, [])
 
-  const enriched = useMemo(() => {
-    const map = new Map(all.map((m) => [Number(m.id), m]))
-    return saved
-      .map((s) => map.get(s.id))
-      .filter(Boolean) as UserMaterial[]
-  }, [saved, all])
-
-  const isSaved = (id: number | string) => saved.some((s) => s.id === Number(id))
+  const isSaved = (id: number | string) => all.some((m) => Number(m.id) === Number(id))
   const requestUnsave = (id: number) => {
     setPendingUnsaveId(id)
     setConfirmOpen(true)
@@ -52,7 +44,6 @@ export default function SavedMaterials() {
     try { await apiRemoveFavorite(pendingUnsaveId) } catch {
       // ignore
     }
-    setSaved((prev) => prev.filter((x) => x.id !== pendingUnsaveId))
     setAll((prev) => prev.filter((x) => Number(x.id) !== pendingUnsaveId))
     setPendingUnsaveId(null)
     setConfirmOpen(false)
@@ -66,7 +57,7 @@ export default function SavedMaterials() {
       <section className="space-y-3">
         <h2 className="font-semibold">Мои сохранённые</h2>
         <ul className="divide-y bg-white border rounded-md">
-          {enriched.map((m) => (
+          {all.map((m) => (
             <li key={m.id} className="p-4 hover:bg-sky-50 flex items-start justify-between gap-4">
               <div className="flex-1 min-w-0">
                 <div className="font-medium truncate" title={m.title}>{m.title}</div>
@@ -137,7 +128,7 @@ export default function SavedMaterials() {
               </div>
             </li>
           ))}
-          {enriched.length === 0 && (
+          {all.length === 0 && (
             <li className="p-4 text-slate-500">Закладок пока нет. Откройте раздел «Материалы» и сохраните понравившиеся.</li>
           )}
         </ul>

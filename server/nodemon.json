@@ -1,0 +1,15 @@
+{
+  "watch": [
+    "index.js",
+    "db.js",
+    "routes/**/*.js"
+  ],
+  "ignore": [
+    "uploads/**",
+    "node_modules/**",
+    "../src/**",
+    "../dist/**"
+  ],
+  "ext": "js,json",
+  "delay": "200ms"
+}

@@ -48,90 +48,43 @@
 				"build"
 			],
 			"isBackground": false,
-			"problemMatcher": [
-				"$eslint-compact"
-			],
+			"problemMatcher": [],
 			"group": "build"
 		},
 		{
-			"label": "build (one-off)",
+			"label": "ngrok: vite",
+			"type": "shell",
+			"command": "ngrok",
+			"args": [
+				"http",
+				"http://localhost:5173",
+				"--log=stdout"
+			],
+			"isBackground": true,
+			"group": "build",
+			"problemMatcher": []
+		},
+		{
+			"label": "share: dev+ngrok",
+			"dependsOn": [
+				"server: dev",
+				"vite: dev",
+				"ngrok: vite"
+			],
+			"dependsOrder": "parallel",
+			"group": {
+				"kind": "build"
+			}
+		},
+		{
+			"label": "server: restart",
 			"type": "shell",
 			"command": "npm",
 			"args": [
 				"run",
-				"build"
+				"dev"
 			],
-			"isBackground": false,
-			"problemMatcher": [
-				"$tsc"
-			],
-			"group": "build"
-		},
-		{
-			"label": "lint (one-off)",
-			"type": "shell",
-			"command": "npm",
-			"args": [
-				"run",
-				"lint"
-			],
-			"isBackground": false,
-			"problemMatcher": [
-				"$eslint-stylish"
-			],
-			"group": "build"
-		},
-		{
-			"label": "lint (one-off)",
-			"type": "shell",
-			"command": "npm",
-			"args": [
-				"run",
-				"lint"
-			],
-			"isBackground": false,
-			"problemMatcher": [
-				"$eslint-stylish"
-			],
-			"group": "build"
-		},
-		{
-			"label": "lint (one-off)",
-			"type": "shell",
-			"command": "npm",
-			"args": [
-				"run",
-				"lint"
-			],
-			"isBackground": false,
-			"problemMatcher": [
-				"$eslint-stylish"
-			],
-			"group": "build"
-		},
-		{
-			"label": "lint (one-off)",
-			"type": "shell",
-			"command": "npm",
-			"args": [
-				"run",
-				"lint"
-			],
-			"isBackground": false,
-			"problemMatcher": [
-				"$eslint-stylish"
-			],
-			"group": "build"
-		},
-		{
-			"label": "build (one-off)",
-			"type": "shell",
-			"command": "npm",
-			"args": [
-				"run",
-				"build"
-			],
-			"isBackground": false,
+			"isBackground": true,
 			"group": "build"
 		}
 	]

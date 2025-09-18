@@ -9,11 +9,17 @@ export default defineConfig({
       '@': '/src',
     },
   },
+  optimizeDeps: {
+    include: ['react', 'react-dom', 'react-router-dom', 'axios'],
+  },
   server: {
     port: 5173,
     host: true,
     // Allow access via public tunnels (e.g., *.loca.lt / trycloudflare)
     allowedHosts: true,
+    hmr: { overlay: true },
+    // Improve stability on Windows/WSL/Network drives
+    watch: { usePolling: false, interval: 150 },
     proxy: {
       '/api': {
         target: 'http://localhost:4000',

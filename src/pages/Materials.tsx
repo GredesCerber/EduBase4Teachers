@@ -16,6 +16,7 @@ import { useI18n } from '@/i18n/I18nContext'
 export default function Materials() {
   const { user } = useAuth()
   const { t } = useI18n()
+  const userId = user?.id
   const [subject, setSubject] = useState('')
   const [grade, setGrade] = useState('')
   const [type, setType] = useState('')
@@ -74,7 +75,7 @@ export default function Materials() {
   // When user logs in, sync server favorites into local saved
   useEffect(() => {
     (async () => {
-      if (!user) return
+      if (!userId) return
       try {
         const res = await getFavoriteMaterials()
         const list: SavedMaterial[] = (res.materials || []).map((m: any) => ({ id: Number(m.id), title: m.title, subject: m.subject, grade: m.grade, type: m.type }))
@@ -83,7 +84,7 @@ export default function Materials() {
         // ignore
       }
     })()
-  }, [user?.id])
+  }, [userId])
 
   const isSaved = (id: number | string) => saved.some((s) => s.id === Number(id))
   // toggleSaved handled inline in StarButton onClick with server sync

@@ -206,3 +206,49 @@ export async function incrementView(materialId: number | string) {
   const res = await api.post(`/materials/${materialId}/view`)
   return res.data as { ok: boolean }
 }
+
+// Forum
+export type ForumThread = { id: number; user_id: number; author_name: string; title: string; posts_count: number; last_post_at?: string; created_at: string; likes_count?: number; my_like?: boolean }
+export type ForumPost = { id: number; thread_id: number; user_id: number; author_name: string; content: string; created_at: string; files: Array<{ id: number; file_url: string; file_name: string; size?: number; mime_type?: string }>; reactions: { likes: number; dislikes: number; emojis: Record<string, number>; my: Array<{ type: 'like' | 'dislike' | 'emoji'; emoji: string | null }> } }
+
+export async function listForumThreads(params?: { q?: string; limit?: number; offset?: number; sort?: 'new' | 'top' | 'active' }) {
+  const res = await api.get('/forum/threads', { params })
+  return res.data as { threads: ForumThread[] }
+}
+
+export async function createForumThreadApi(title: string) {
+  const res = await api.post('/forum/threads', { title })
+  return res.data as { thread: ForumThread }
+}
+
+export async function getForumThreadApi(id: number | string) {
+  const res = await api.get(`/forum/threads/${id}`)
+  return res.data as { thread: ForumThread; posts: ForumPost[] }
+}
+
+export async function addForumPostApi(id: number | string, data: { content: string; files?: File[] }, onProgress?: (percent: number) => void) {
+  const form = new FormData()
+  form.append('content', data.content || '')
+  for (const f of data.files || []) form.append('files', f, f.name)
+  const res = await api.post(`/forum/threads/${id}/posts`, form, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+    onUploadProgress: (evt) => {
+      if (!onProgress) return
+      const total = evt.total || (evt as any).event?.total
+      if (!total) return
+      const percent = Math.round((evt.loaded / total) * 100)
+      onProgress(percent)
+    },
+  })
+  return res.data as { postId: number }
+}
+
+export async function reactToPost(postId: number | string, payload: { type: 'like' | 'dislike' | 'emoji'; emoji?: string }) {
+  const res = await api.post(`/forum/posts/${postId}/react`, payload)
+  return res.data as { reactions: { likes: number; dislikes: number; emojis: Record<string, number>; my: Array<{ type: 'like' | 'dislike' | 'emoji'; emoji: string | null }> } }
+}
+
+export async function toggleThreadLike(threadId: number | string) {
+  const res = await api.post(`/forum/threads/${threadId}/like`)
+  return res.data as { likes_count: number; my_like: boolean }
+}
