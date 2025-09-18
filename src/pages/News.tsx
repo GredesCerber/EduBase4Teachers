@@ -42,11 +42,19 @@ export default function News() {
           <ul className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
             {items.map((n, i) => (
               <li key={i} className="border rounded-md overflow-hidden bg-white">
-                {n.image ? (
-                  <a href={n.url} target="_blank" rel="noreferrer">
-                    <img src={n.image} alt="" className="w-full h-40 object-cover" />
-                  </a>
-                ) : null}
+                <a href={n.url} target="_blank" rel="noreferrer" className="block w-full h-40 bg-slate-100">
+                  {n.image ? (
+                    <img
+                      src={n.image}
+                      alt=""
+                      className="w-full h-40 object-cover"
+                      onError={(e) => {
+                        // Hide broken image; keep placeholder background
+                        (e.currentTarget as HTMLImageElement).style.display = 'none'
+                      }}
+                    />
+                  ) : null}
+                </a>
                 <div className="p-3 space-y-2">
                   <a href={n.url} target="_blank" rel="noreferrer" className="font-medium hover:underline line-clamp-3 block">
                     {n.title}

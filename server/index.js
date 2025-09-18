@@ -206,18 +206,6 @@ app.get('/api/stats', async (_req, res) => {
   }
 })
 
-// Simple 404 for unknown API routes
-app.use('/api', (_req, res) => {
-  res.status(404).json({ message: 'Not found' })
-})
-
-// Central error handler (keeps logs cleaner)
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
-app.use((err, _req, res, _next) => {
-  console.error(err)
-  res.status(500).json({ message: 'Server error' })
-})
-
 // Forum endpoints
 // List threads
 app.get('/api/forum/threads', optionalAuth, async (req, res) => {
@@ -386,11 +374,21 @@ app.get('/api/news/inform', async (_req, res) => {
       'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
       'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
       'Accept-Language': 'ru-RU,ru;q=0.9,en-US;q=0.8,en;q=0.7',
+      'Accept-Encoding': 'gzip, deflate, br',
     }
-    const response = await axios.get(INFORM_URL, { headers: commonHeaders, timeout: 12000 })
+    const response = await axios.get(INFORM_URL, { headers: commonHeaders, timeout: 8000 })
     const $ = cheerioLoad(response.data)
 
     const items = []
+
+    // Proxy helper to avoid hotlink restrictions on some images
+    const proxify = (u) => {
+      const s = String(u || '').trim()
+      if (!s) return ''
+      // Avoid double-proxying
+      if (s.startsWith('/api/news/image')) return s
+      return `/api/news/image?u=${encodeURIComponent(s)}`
+    }
 
     function absolutize(u) {
       if (!u) return ''
@@ -454,12 +452,12 @@ app.get('/api/news/inform', async (_req, res) => {
       let href = linkEl.attr('href') || ''
       href = absolutize(href)
       const title = (linkEl.attr('title') || linkEl.text() || '').trim()
-      const image = extractImage(root)
+  const image = extractImage(root)
       const summary = (root.find('.list-news__desc, .news__desc, .article__desc, p').first().text() || '').trim()
       const dateText = (root.find('time').attr('datetime') || root.find('time').text() || '').trim()
       if (!title || !href) return
       if (isLikelyAd({ root, title, href, image })) return
-      items.push({ title, url: href, image: image || null, summary: summary || null, publishedAt: dateText || null })
+  items.push({ title, url: href, image: image ? proxify(image) : null, summary: summary || null, publishedAt: dateText || null })
     })
     // Fallback: try another structure if none parsed
     if (!items.length) {
@@ -471,44 +469,108 @@ app.get('/api/news/inform', async (_req, res) => {
           const root = $(el).closest('article, .list-news__item, .news__item')
           const image = extractImage(root)
           if (!isLikelyAd({ root, title: t, href, image })) {
-            items.push({ title: t, url: href, image: image || null, summary: null, publishedAt: null })
+            items.push({ title: t, url: href, image: image ? proxify(image) : null, summary: null, publishedAt: null })
           }
         }
       })
     }
-    // Optional enhancement: fetch OG image for first few items where image is missing
-    const needOg = items.filter((it) => !it.image).slice(0, 8)
-    if (needOg.length) {
-      await Promise.all(
-        needOg.map(async (it) => {
+    // Return quickly with basic items (no blocking on OG fetch)
+    const initial = items.slice(0, 20)
+    informCache = { ts: now, data: initial }
+    // Kick off background enrichment of missing images
+    try {
+      const needOg = items.filter((it) => !it.image)
+      async function mapLimit(arr, limit, fn) {
+        const ret = []
+        const executing = []
+        for (const [i, item] of arr.entries()) {
+          const p = Promise.resolve().then(() => fn(item, i))
+          ret.push(p)
+          if (limit > 0) {
+            const e = p.then(() => executing.splice(executing.indexOf(e), 1))
+            executing.push(e)
+            if (executing.length >= limit) await Promise.race(executing)
+          }
+        }
+        return Promise.all(ret)
+      }
+      if (needOg.length) {
+        // Run after response is sent
+        setImmediate(async () => {
           try {
-            const page = await axios.get(it.url, { headers: commonHeaders, timeout: 8000 })
-            const $$ = cheerioLoad(page.data)
-            const og = $$('meta[property="og:image"]').attr('content') || $$('meta[name="twitter:image"]').attr('content') || ''
-            let img = og || ''
-            if (!img) {
-              // try first article image
-              const aimg = $$('article img').first()
-              img = aimg.attr('data-src') || aimg.attr('data-original') || aimg.attr('data-lazy-src') || aimg.attr('src') || ''
-              if (!img) {
-                const ss = aimg.attr('data-srcset') || aimg.attr('srcset') || ''
-                if (ss) img = pickFromSrcset(ss)
-              }
-            }
-            img = (img || '').trim()
-            if (img) {
-              const abs = absolutize(img)
-              if (abs && !abs.startsWith('data:')) it.image = abs
-            }
+            await mapLimit(needOg.slice(0, 20), 4, async (it) => {
+              try {
+                const page = await axios.get(it.url, { headers: commonHeaders, timeout: 10000 })
+                const $$ = cheerioLoad(page.data)
+                // Try multiple meta candidates
+                let img =
+                  $$('meta[property="og:image"]').attr('content') ||
+                  $$('meta[name="twitter:image"]').attr('content') ||
+                  $$('meta[itemprop="image"]').attr('content') ||
+                  $$('link[rel="image_src"]').attr('href') ||
+                  ''
+                if (!img) {
+                  // try first prominent article image or any image in content
+                  const aimg = $$('article img').first().attr('src')
+                    || $$('article img').first().attr('data-src')
+                    || $$('img').first().attr('data-src')
+                    || $$('img').first().attr('src')
+                    || ''
+                  img = aimg
+                  if (!img) {
+                    const ss = $$('article img').first().attr('data-srcset') || $$('article img').first().attr('srcset') || ''
+                    if (ss) img = pickFromSrcset(ss)
+                  }
+                }
+                img = (img || '').trim()
+                if (img) {
+                  const abs = absolutize(img)
+                  if (abs && !abs.startsWith('data:')) it.image = proxify(abs)
+                }
+              } catch {}
+            })
+            // Update cache with enriched data (without resetting freshness window)
+            informCache = { ts: Date.now(), data: items.slice(0, 20) }
           } catch {}
         })
-      )
-    }
-    informCache = { ts: now, data: items.slice(0, 20) }
-    return res.json({ items: informCache.data, cached: false })
+      }
+    } catch {}
+    return res.json({ items: initial, cached: false })
   } catch (e) {
     console.error('Inform.kz scrape error', e?.message)
-    return res.status(502).json({ message: 'Failed to load news' })
+    // Graceful fallback: do not break UI – return cached (or empty) items
+    const fallback = Array.isArray(informCache.data) ? informCache.data : []
+    return res.status(200).json({ items: fallback, cached: true })
+  }
+})
+
+// Secure image proxy for news (to bypass hotlink restrictions)
+app.get('/api/news/image', async (req, res) => {
+  try {
+    const u = String(req.query.u || '')
+    if (!u) return res.status(400).end()
+    let url
+    try { url = new URL(u) } catch { return res.status(400).end() }
+    const allowedHosts = new Set([
+      'www.inform.kz', 'inform.kz',
+      'static.inform.kz', 's.inform.kz',
+      'cdn.inform.kz', 'img.inform.kz'
+    ])
+    if (!allowedHosts.has(url.hostname)) return res.status(403).end()
+    const headers = {
+      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+      'Referer': 'https://www.inform.kz/',
+      'Accept': 'image/avif,image/webp,image/apng,image/*,*/*;q=0.8',
+      'Accept-Language': 'ru-RU,ru;q=0.9,en-US;q=0.8,en;q=0.7',
+      'Accept-Encoding': 'gzip, deflate, br',
+    }
+    const r = await axios.get(url.toString(), { headers, timeout: 10000, responseType: 'arraybuffer', validateStatus: (s) => s >= 200 && s < 400 })
+    const ct = r.headers['content-type'] || 'image/jpeg'
+    res.setHeader('Content-Type', ct)
+    res.setHeader('Cache-Control', 'public, max-age=1800, immutable')
+    return res.send(Buffer.from(r.data))
+  } catch (e) {
+    return res.status(204).end()
   }
 })
 
@@ -1148,4 +1210,17 @@ app.listen(PORT, () => {
 process.on('SIGINT', () => {
   db.close()
   process.exit(0)
+})
+
+// Place 404 and error handlers at the very end so they don't shadow real routes
+// Simple 404 for unknown API routes
+app.use('/api', (_req, res) => {
+  res.status(404).json({ message: 'Not found' })
+})
+
+// Central error handler (keeps logs cleaner)
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+app.use((err, _req, res, _next) => {
+  console.error(err)
+  res.status(500).json({ message: 'Server error' })
 })
