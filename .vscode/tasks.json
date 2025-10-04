@@ -86,6 +86,18 @@
 			],
 			"isBackground": true,
 			"group": "build"
+		},
+		{
+			"label": "ngrok: vite:5174",
+			"type": "shell",
+			"command": "ngrok",
+			"args": [
+				"http",
+				"http://localhost:5174",
+				"--log=stdout"
+			],
+			"isBackground": true,
+			"group": "build"
 		}
 	]
 }
