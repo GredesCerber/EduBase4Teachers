@@ -22,14 +22,26 @@ export default function Home() {
       <section>
         <h2 className="text-xl font-bold mb-4">Популярные разделы</h2>
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-          <Link to="/materials/notes">
-            <Card icon="📄" title="Конспект" description="Готовые конспекты уроков" />
+          <Link to="/materials" className="group">
+            <Card
+              title="Материалы"
+              description="Всё для уроков и внеурочной деятельности"
+              className="group-hover:scale-105 group-hover:bg-primary-100 group-hover:border-primary-400 transition duration-150 border-slate-200 bg-white"
+            />
           </Link>
-          <Link to="/materials/presentations">
-            <Card icon="🎤" title="Презентация" description="Слайды к урокам" />
+          <Link to="/experience/best-practices" className="group">
+            <Card
+              title="Опыт учителей"
+              description="Лучшие практики и советы коллег"
+              className="group-hover:scale-105 group-hover:bg-primary-100 group-hover:border-primary-400 transition duration-150 border-slate-200 bg-white"
+            />
           </Link>
-          <Link to="/materials/programs">
-            <Card icon="📘" title="Рабочая программа" description="Планы и КТП" />
+          <Link to="/news" className="group">
+            <Card
+              title="Новости"
+              description="Актуальные события и обновления"
+              className="group-hover:scale-105 group-hover:bg-primary-100 group-hover:border-primary-400 transition duration-150 border-slate-200 bg-white"
+            />
           </Link>
         </div>
       </section>
