@@ -362,147 +362,166 @@ app.post('/api/forum/posts/:id/react', authMiddleware, async (req, res) => {
 
 // Simple in-memory cache for news
 let informCache = { ts: 0, data: [] }
-const INFORM_URL = 'https://www.inform.kz/category/obrazovanie_s501'
-// Scrape Inform.kz education category
+const INFORM_SOURCES = [
+  { url: 'https://www.inform.kz/category/obrazovanie_s501', referer: 'https://www.inform.kz/category/obrazovanie_s501' },
+  { url: 'https://www.inform.kz/tag/obrazovanie_t106', referer: 'https://www.inform.kz/tag/obrazovanie_t106' },
+]
+// Scrape Inform.kz education category/tag pages
 app.get('/api/news/inform', async (_req, res) => {
-  try {
-    const now = Date.now()
-    if (informCache.data.length && now - informCache.ts < 5 * 60 * 1000) {
-      return res.json({ items: informCache.data, cached: true })
-    }
-    const commonHeaders = {
-      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
-      'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
-      'Accept-Language': 'ru-RU,ru;q=0.9,en-US;q=0.8,en;q=0.7',
-      'Accept-Encoding': 'gzip, deflate, br',
-    }
-    const response = await axios.get(INFORM_URL, { headers: commonHeaders, timeout: 8000 })
-    const $ = cheerioLoad(response.data)
+  const now = Date.now()
+  if (informCache.data.length && now - informCache.ts < 5 * 60 * 1000) {
+    return res.json({ items: informCache.data, cached: true })
+  }
 
-    const items = []
+  const baseHeaders = {
+    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+    'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
+    'Accept-Language': 'ru-RU,ru;q=0.9,en-US;q=0.8,en;q=0.7',
+    'Accept-Encoding': 'gzip, deflate, br',
+    'Cache-Control': 'max-age=0',
+    'Connection': 'keep-alive',
+    'Upgrade-Insecure-Requests': '1',
+    'Sec-Fetch-Dest': 'document',
+    'Sec-Fetch-Mode': 'navigate',
+    'Sec-Fetch-Site': 'same-origin',
+    'Sec-Fetch-User': '?1',
+    'Pragma': 'no-cache',
+    'Cookie': 'lng=ru',
+  }
 
-    // Proxy helper to avoid hotlink restrictions on some images
-    const proxify = (u) => {
-      const s = String(u || '').trim()
-      if (!s) return ''
-      // Avoid double-proxying
-      if (s.startsWith('/api/news/image')) return s
-      return `/api/news/image?u=${encodeURIComponent(s)}`
-    }
+  const proxify = (u) => {
+    const s = String(u || '').trim()
+    if (!s) return ''
+    if (s.startsWith('/api/news/image')) return s
+    return `/api/news/image?u=${encodeURIComponent(s)}`
+  }
 
-    function absolutize(u) {
-      if (!u) return ''
-      if (u.startsWith('//')) return `https:${u}`
-      if (u.startsWith('/')) return `https://www.inform.kz${u}`
-      return u
-    }
+  function absolutize(u) {
+    if (!u) return ''
+    if (u.startsWith('//')) return `https:${u}`
+    if (u.startsWith('/')) return `https://www.inform.kz${u}`
+    return u
+  }
 
-    function pickFromSrcset(srcset) {
-      try {
-        // srcset: "url1 320w, url2 640w" → pick the largest (last)
-        const parts = String(srcset).split(',').map((s) => s.trim()).filter(Boolean)
-        if (!parts.length) return ''
-        const last = parts[parts.length - 1].split(' ')[0]
-        return last || ''
-      } catch { return '' }
-    }
-
-    function extractImage(root) {
-      const img = root.find('img').first()
-      let candidates = []
-      // Common lazy attrs
-      const imgSrc = img.attr('data-src') || img.attr('data-original') || img.attr('data-lazy-src') || img.attr('data-lazysrc') || img.attr('data-ll-src') || img.attr('src') || ''
-      const imgSrcset = img.attr('data-srcset') || img.attr('data-lazy-srcset') || img.attr('srcset') || ''
-      if (imgSrcset) candidates.push(pickFromSrcset(imgSrcset))
-      if (imgSrc) candidates.push(imgSrc)
-      // All <source> in <picture>
-      root.find('picture source').each((_, s) => {
-        const ss = (s.attribs && (s.attribs['data-srcset'] || s.attribs['srcset'])) || ''
-        if (ss) candidates.push(pickFromSrcset(ss))
-      })
-      // Fallback: any element with background-image style
-      const styleBg = (root.attr('style') || '').match(/background-image:\s*url\(['\"]?([^'\")]+)['\"]?\)/i)
-      if (styleBg && styleBg[1]) candidates.push(styleBg[1])
-      // Normalize and pick the first valid
-      for (const c of candidates.map((x) => (x || '').trim()).filter(Boolean)) {
-        const abs = absolutize(c)
-        if (abs && !abs.startsWith('data:')) return abs
-      }
+  function pickFromSrcset(srcset) {
+    try {
+      const parts = String(srcset).split(',').map((s) => s.trim()).filter(Boolean)
+      if (!parts.length) return ''
+      const last = parts[parts.length - 1].split(' ')[0]
+      return last || ''
+    } catch {
       return ''
     }
+  }
 
-    function isLikelyAd({ root, title, href, image }) {
-      const t = (title || '').toLowerCase()
-      const h = (href || '').toLowerCase()
-      const im = (image || '').toLowerCase()
-      const cls = (root.attr('class') || '').toLowerCase()
-      const text = (root.text() || '').toLowerCase()
-      const adWords = ['реклама', 'на правах рекламы', 'promo', 'промо', 'реклам', 'sponsor', 'sponsored', 'adv', 'banner', 'adfox']
-      if (adWords.some((w) => t.includes(w) || text.includes(w))) return true
-      if (adWords.some((w) => cls.includes(w))) return true
-      if (adWords.some((w) => h.includes(w))) return true
-      if (adWords.some((w) => im.includes(w))) return true
-      return false
-    }
-
-    // The site structure may change; try the most common containers
-    $('.list-news__item, .news__item, article').each((_, el) => {
-      const root = $(el)
-      const linkEl = root.find('a').first()
-      let href = linkEl.attr('href') || ''
-      href = absolutize(href)
-      const title = (linkEl.attr('title') || linkEl.text() || '').trim()
-  const image = extractImage(root)
-      const summary = (root.find('.list-news__desc, .news__desc, .article__desc, p').first().text() || '').trim()
-      const dateText = (root.find('time').attr('datetime') || root.find('time').text() || '').trim()
-      if (!title || !href) return
-      if (isLikelyAd({ root, title, href, image })) return
-  items.push({ title, url: href, image: image ? proxify(image) : null, summary: summary || null, publishedAt: dateText || null })
+  function extractImage(root) {
+    const img = root.find('img').first()
+    const candidates = []
+    const imgSrc =
+      img.attr('data-src') ||
+      img.attr('data-original') ||
+      img.attr('data-lazy-src') ||
+      img.attr('data-lazysrc') ||
+      img.attr('data-ll-src') ||
+      img.attr('src') ||
+      ''
+    const imgSrcset = img.attr('data-srcset') || img.attr('data-lazy-srcset') || img.attr('srcset') || ''
+    if (imgSrcset) candidates.push(pickFromSrcset(imgSrcset))
+    if (imgSrc) candidates.push(imgSrc)
+    root.find('picture source').each((_, s) => {
+      const ss = (s.attribs && (s.attribs['data-srcset'] || s.attribs.srcset)) || ''
+      if (ss) candidates.push(pickFromSrcset(ss))
     })
-    // Fallback: try another structure if none parsed
-    if (!items.length) {
-      $('a').each((_, el) => {
-        const t = ($(el).attr('title') || $(el).text() || '').trim()
-        let href = $(el).attr('href') || ''
-        if (t && href && href.includes('/ru/')) {
-          href = absolutize(href)
-          const root = $(el).closest('article, .list-news__item, .news__item')
-          const image = extractImage(root)
-          if (!isLikelyAd({ root, title: t, href, image })) {
-            items.push({ title: t, url: href, image: image ? proxify(image) : null, summary: null, publishedAt: null })
-          }
-        }
-      })
+    const styleBg = (root.attr('style') || '').match(/background-image:\s*url\(['\"]?([^'\")]+)['\"]?\)/i)
+    if (styleBg && styleBg[1]) candidates.push(styleBg[1])
+    for (const c of candidates.map((x) => (x || '').trim()).filter(Boolean)) {
+      const abs = absolutize(c)
+      if (abs && !abs.startsWith('data:')) return abs
     }
-    // Return quickly with basic items (no blocking on OG fetch)
-    const initial = items.slice(0, 20)
-    informCache = { ts: now, data: initial }
-    // Kick off background enrichment of missing images
-    try {
-      const needOg = items.filter((it) => !it.image)
-      async function mapLimit(arr, limit, fn) {
-        const ret = []
-        const executing = []
-        for (const [i, item] of arr.entries()) {
-          const p = Promise.resolve().then(() => fn(item, i))
-          ret.push(p)
-          if (limit > 0) {
-            const e = p.then(() => executing.splice(executing.indexOf(e), 1))
-            executing.push(e)
-            if (executing.length >= limit) await Promise.race(executing)
-          }
-        }
-        return Promise.all(ret)
+    return ''
+  }
+
+  function isLikelyAd({ root, title, href, image }) {
+    const t = (title || '').toLowerCase()
+    const h = (href || '').toLowerCase()
+    const im = (image || '').toLowerCase()
+    const cls = (root.attr('class') || '').toLowerCase()
+    const text = (root.text() || '').toLowerCase()
+    const adWords = ['реклама', 'на правах рекламы', 'promo', 'промо', 'реклам', 'sponsor', 'sponsored', 'adv', 'banner', 'adfox']
+    if (adWords.some((w) => t.includes(w) || text.includes(w))) return true
+    if (adWords.some((w) => cls.includes(w))) return true
+    if (adWords.some((w) => h.includes(w))) return true
+    if (adWords.some((w) => im.includes(w))) return true
+    return false
+  }
+
+  async function mapLimit(arr, limit, fn) {
+    const ret = []
+    const executing = []
+    for (const [i, item] of arr.entries()) {
+      const p = Promise.resolve().then(() => fn(item, i))
+      ret.push(p)
+      if (limit > 0) {
+        const e = p.then(() => executing.splice(executing.indexOf(e), 1))
+        executing.push(e)
+        if (executing.length >= limit) await Promise.race(executing)
       }
+    }
+    return Promise.all(ret)
+  }
+
+  let lastError = null
+
+  for (const source of INFORM_SOURCES) {
+    try {
+      const headers = { ...baseHeaders, Referer: source.referer || source.url }
+      const response = await axios.get(source.url, { headers, timeout: 8000 })
+      const $ = cheerioLoad(response.data)
+      const items = []
+
+      $('.tagpageCard, .catpageCard, .list-news__item, .news__item, article').each((_, el) => {
+        const root = $(el)
+        const linkEl = root.find('a').first()
+        let href = linkEl.attr('href') || root.attr('href') || ''
+        href = absolutize(href)
+        const title = (
+          root.find('.tagpageCard_title, .catpageCard_title').first().text() ||
+          linkEl.attr('title') ||
+          linkEl.text() ||
+          root.find('h2, h3').first().text() ||
+          ''
+        ).trim()
+        const image = extractImage(root)
+        const summary = (
+          root.find('.tagpageCard_desc, .tagpageCard_intro, .catpageCard_desc, .catpageCard_intro, .list-news__desc, .news__desc, .article__desc').first().text() ||
+          root.find('p').not('time').first().text() ||
+          ''
+        ).trim()
+        const dateText = (
+          root.find('.tagpageCard_time, .catpageCard_time').first().text() ||
+          root.find('time').attr('datetime') ||
+          root.find('time').text() ||
+          ''
+        ).trim()
+        if (!title || !href) return
+        if (isLikelyAd({ root, title, href, image })) return
+        items.push({ title, url: href, image: image ? proxify(image) : null, summary: summary || null, publishedAt: dateText || null })
+      })
+
+      if (!items.length) continue
+
+      const initial = items.slice(0, 20)
+      informCache = { ts: now, data: initial }
+
+      const needOg = items.filter((it) => !it.image)
       if (needOg.length) {
-        // Run after response is sent
         setImmediate(async () => {
           try {
             await mapLimit(needOg.slice(0, 20), 4, async (it) => {
               try {
-                const page = await axios.get(it.url, { headers: commonHeaders, timeout: 10000 })
+                const articleHeaders = { ...headers, Referer: it.url }
+                const page = await axios.get(it.url, { headers: articleHeaders, timeout: 10000 })
                 const $$ = cheerioLoad(page.data)
-                // Try multiple meta candidates
                 let img =
                   $$('meta[property="og:image"]').attr('content') ||
                   $$('meta[name="twitter:image"]').attr('content') ||
@@ -510,12 +529,12 @@ app.get('/api/news/inform', async (_req, res) => {
                   $$('link[rel="image_src"]').attr('href') ||
                   ''
                 if (!img) {
-                  // try first prominent article image or any image in content
-                  const aimg = $$('article img').first().attr('src')
-                    || $$('article img').first().attr('data-src')
-                    || $$('img').first().attr('data-src')
-                    || $$('img').first().attr('src')
-                    || ''
+                  const aimg =
+                    $$('article img').first().attr('src') ||
+                    $$('article img').first().attr('data-src') ||
+                    $$('img').first().attr('data-src') ||
+                    $$('img').first().attr('src') ||
+                    ''
                   img = aimg
                   if (!img) {
                     const ss = $$('article img').first().attr('data-srcset') || $$('article img').first().attr('srcset') || ''
@@ -529,19 +548,21 @@ app.get('/api/news/inform', async (_req, res) => {
                 }
               } catch {}
             })
-            // Update cache with enriched data (without resetting freshness window)
             informCache = { ts: Date.now(), data: items.slice(0, 20) }
           } catch {}
         })
       }
-    } catch {}
-    return res.json({ items: initial, cached: false })
-  } catch (e) {
-    console.error('Inform.kz scrape error', e?.message)
-    // Graceful fallback: do not break UI – return cached (or empty) items
-    const fallback = Array.isArray(informCache.data) ? informCache.data : []
-    return res.status(200).json({ items: fallback, cached: true })
+
+      return res.json({ items: initial, cached: false })
+    } catch (e) {
+      lastError = e
+      console.warn('Inform.kz source failed', source.url, e?.message)
+    }
   }
+
+  console.error('Inform.kz scrape error', lastError?.message)
+  const fallback = Array.isArray(informCache.data) ? informCache.data : []
+  return res.status(200).json({ items: fallback, cached: true })
 })
 
 // Secure image proxy for news (to bypass hotlink restrictions)
